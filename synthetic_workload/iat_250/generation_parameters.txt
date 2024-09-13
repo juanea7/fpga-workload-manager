@@ -1,0 +1,8 @@
+python3 generate_initial_conditions.py -n 20000 -t 250 --range-kernels 0 11 --base-number-executions 128 --range-executions 5 -s 42
+
+Number of kernels: 20000
+Ratio of arrival (k/ms): 0.004
+Range of kernels: [0, 11]
+Base number of executions: 128
+Range of executions: 5
+Initial conditions successfully saved into files.
