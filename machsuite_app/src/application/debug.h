@@ -59,7 +59,7 @@
 #define PYNQ 1
 #define ZCU  2
 #ifndef BOARD
-    #define BOARD PYNQ
+    #define BOARD ZCU
 #endif
 
 // Debug messages
