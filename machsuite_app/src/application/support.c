@@ -453,6 +453,10 @@ void monitor_setup(const int doble_reference_voltage) {
 	// Monitor Init
 	monitor_init();
 
+	// Clean monitor hw
+	monitor_stop();
+	monitor_clean();
+
 	// Config Vref
 	if(doble_reference_voltage == 1)
 		monitor_config_2vref();
@@ -471,6 +475,10 @@ void monitor_cleanup(void) {
 	print_debug("\nCleaning Monitor...\n");
 
 	#if MONITOR
+
+	// Clean monitor hw
+	monitor_stop();
+	monitor_clean();
 
 	// Clean monitor setup
     monitor_exit();
