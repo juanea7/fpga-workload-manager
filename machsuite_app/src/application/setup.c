@@ -129,8 +129,8 @@ volatile int monitorization_stop_flag = 0;
 // Global thread pool variable
 thread_pool *tpool;
 
-// System Operating Mode Enum
-enum operating_mode_enum {EXECUTION, TRAIN}operating_mode;
+// Monitor Mode Enum
+enum monitoring_mode_enum {MEASURE, IDLE, SEND_DATA}monitoring_mode;
 
 // TODO: Condition and variable used to check if last workload has finished
 pthread_cond_t workload_finished_condition = PTHREAD_COND_INITIALIZER;
@@ -596,7 +596,7 @@ void* queue_manager_thread(void *arg) {
 				print_error("Queue Manager - kernel_service_lock_0\n");
 				exit(1);
 			}
-			while(kernels_to_serve_variable == 0 || kernels_are_executable_variable == 0 || free_slots_variable == 0 || operating_mode == TRAIN) {
+			while(kernels_to_serve_variable == 0 || kernels_are_executable_variable == 0 || free_slots_variable == 0 || monitoring_mode == SEND_DATA) {
 
 				if(pthread_cond_wait(&kernel_service_condition, &kernel_service_lock) < 0) {
 					print_error("Queue Manage - kernel_service_wait\n");
@@ -661,8 +661,29 @@ void* queue_manager_thread(void *arg) {
 				exit(1);
 			}
 			// If we reach the end of the queue, set a flag
-			if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
-				end_of_queue_flag = 1;
+			// TODO: This is a temporal solution, it should be changed to a more elegant way
+			if (monitoring_mode == IDLE) {
+
+				float user_cpu = calculated_cpu_usage[0];
+				float kernel_cpu = calculated_cpu_usage[1];
+				float idle_cpu = calculated_cpu_usage[2];
+
+				if (schedule_lif_from_n_executable_kernels(
+					&kernel_execution_queue,
+					free_slots_tmp,
+					duplicated_kernels_tmp,
+					&kernel_tmp,
+					&online_models,
+					2,  // TODO: can be modified, place in a macro
+					user_cpu,
+					kernel_cpu,
+					idle_cpu) < 0) // TODO: conseguir un mapa tras entrenar (no tenemos info de si está entrenado el sistema)
+					end_of_queue_flag = 1;
+			}
+			else {
+				if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
+					end_of_queue_flag = 1;
+			}
 			if(pthread_mutex_unlock(&kernel_execution_queue_lock) < 0) {
 				print_error("kernel_execution_queue_unlock - get info\n");
 				exit(1);
@@ -1213,9 +1234,9 @@ void* monitoring_thread(void *arg) {
 			// Variable storing observations to wait commanded from the Python
 			int obs_to_wait = 0;
 
-			// Indicate we go to TRAIN mode
-			operating_mode = TRAIN;
-			printf("[EXECUTION] -> [TRAIN]\n");
+			// Indicate we go to SEND_DATA mode
+			monitoring_mode = SEND_DATA;
+			printf("[Monitor] -> [SEND_DATA]\n");
 
 			#if ONLINE_MODELS
 				// Signal the python code that there is new online data to train/test the models on
@@ -1232,12 +1253,12 @@ void* monitoring_thread(void *arg) {
 
 			#endif
 
-			// Indicate back to execution
-			operating_mode = EXECUTION;
-			printf("[TRAIN] -> [EXECUTION]\n");
-
 			// Wait or not based on the return of the models from the python side
 			if (obs_to_wait > 0) {
+
+				// Indicate going to idle
+				monitoring_mode = IDLE;
+				printf("[Monitor]-> [IDLE]\n");
 
 				// Update timer to wait the idle phase
 				// TODO: Generate a define with the time to wait
@@ -1275,6 +1296,10 @@ void* monitoring_thread(void *arg) {
 				// Wait until measurement idle time passes
 				clock_nanosleep(CLOCK_MONOTONIC,TIMER_ABSTIME,&(schedule_timer), NULL);
 
+				// Indicate going to measure
+				monitoring_mode = MEASURE;
+				printf("[Monitor]-> [MEASURE]\n");
+
 				// TODO: Remove. Used for ensuring idle time is properly waited
 				struct timespec t_aux_1;
 				clock_gettime(CLOCK_MONOTONIC, &t_aux_1);
@@ -1285,6 +1310,11 @@ void* monitoring_thread(void *arg) {
 				printf("[Monitor] Idle elapsed time: %ld:%09ld\n", elapsed_online_aux.tv_sec, elapsed_online_aux.tv_nsec);
 			}
 			else {
+
+				// Indicate going to measure
+				monitoring_mode = MEASURE;
+				printf("[Monitor]-> [MEASURE]\n");
+
 				// Indicate back to execution
 				if(pthread_mutex_lock(&kernel_service_lock) < 0) {
 					print_error("Monitor - kernel_service_lock\n");
@@ -1451,7 +1481,8 @@ int main(int argc, char* argv[]) {
 	kernel_data aux_kernel_data;
 
 	// Set Initial Operating Mode
-	operating_mode = EXECUTION;
+	monitoring_mode = MEASURE;
+	printf("[Monitor] -> [MEASURE]\n");
 	/*************************** Print Setup Parameters **********************************/
 	char str1[]  = "Board (PYNQ:1|ZCU:2)";
 	char str2[]  = "Monitorization (1/0)";

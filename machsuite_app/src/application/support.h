@@ -141,6 +141,15 @@ struct timespec divide_timespec(struct timespec divident, int divisor);
  */
 void update_timer_ms(struct timespec *time, long int msec);
 
+/**
+ * @brief Calculate percentage of t1 relative to t2
+ *
+ * @param t1 Small time
+ * @param t2 Big time (to which the calculation is relative to)
+ * @return The percentage of \p t2 represented by \p t1
+ */
+double calculate_percentage(struct timespec t1, struct timespec t2);
+
 
 /************************** ARTICo3 Functions ****************************/
 
