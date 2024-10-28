@@ -577,6 +577,13 @@ void* queue_manager_thread(void *arg) {
 
 	// TODO: Remove. Used to measure app time
 	struct timespec t_start, t_end, t_app_elapsed_time;
+
+	// TODO: DEBUG
+	// Structure to measure schedule impact
+	struct timespec t_schedule;
+	struct timespec t_start_schedule, t_end_schedule, t_schedule_elapsed_time;
+
+
 	// Get start time
 	clock_gettime(CLOCK_MONOTONIC, &t_start);
 
@@ -662,6 +669,9 @@ void* queue_manager_thread(void *arg) {
 			}
 			// If we reach the end of the queue, set a flag
 			// TODO: This is a temporal solution, it should be changed to a more elegant way
+
+			clock_gettime(CLOCK_MONOTONIC, &t_start_schedule);
+
 			if (monitoring_mode == IDLE) {
 
 				float user_cpu = calculated_cpu_usage[0];
@@ -684,6 +694,11 @@ void* queue_manager_thread(void *arg) {
 				if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
 					end_of_queue_flag = 1;
 			}
+
+			clock_gettime(CLOCK_MONOTONIC, &t_end_schedule);
+			t_schedule_elapsed_time = diff_timespec(t_start_schedule, t_end_schedule);
+			t_schedule =  add_timespec(t_schedule, t_schedule_elapsed_time);
+
 			if(pthread_mutex_unlock(&kernel_execution_queue_lock) < 0) {
 				print_error("kernel_execution_queue_unlock - get info\n");
 				exit(1);
@@ -851,6 +866,7 @@ void* queue_manager_thread(void *arg) {
 	print_error("\033[1;33mQueue Manager - End Time: %ld:%09ld\033[0m\n", t_end.tv_sec, t_end.tv_nsec);
 	print_error("\033[1;33mQueue Manager - SETUP Elapsed Time: %ld:%09ld\033[0m\n", t_app_elapsed_time.tv_sec, t_app_elapsed_time.tv_nsec);
 	print_error("\033[1;33mQueue Manager - Python Impact: %ld:%09ld (%lf\%)\033[0m\n", t_python.tv_sec, t_python.tv_nsec, calculate_percentage(t_python, t_app_elapsed_time));
+	print_error("\033[1;33mQueue Manager - Schedule Impact: %ld:%09ld (%lf\%)\033[0m\n", t_schedule.tv_sec, t_schedule.tv_nsec, calculate_percentage(t_schedule, t_app_elapsed_time));
 
 	// Exit thread without return argument
 	pthread_exit(NULL);
