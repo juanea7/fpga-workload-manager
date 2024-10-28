@@ -136,7 +136,7 @@ static void _print_kernel_info(const kernel_data *data) {
 	printf("Number of Executions: %d\n",data->num_executions);
 	printf("Number of Compute Units: %d\n",data->cu);
 	printf("ARTICo3 Slot used: %X\n",data->slot_id);
-	printf("Intended Arrival:  %ld\n",data->intended_arrival_time);
+	printf("Intended Arrival (ms):  %ld\n",data->intended_arrival_time_ms);
 	printf("Commanded Arrival: %ld : %ld\n",data->commanded_arrival_time.tv_sec,data->commanded_arrival_time.tv_nsec);
 	printf("Measured Arrival:  %ld : %ld\n",data->measured_arrival_time.tv_sec,data->measured_arrival_time.tv_nsec);
 	printf("Measured Finish:   %ld : %ld\n",data->measured_finish_time.tv_sec,data->measured_finish_time.tv_nsec);
@@ -328,19 +328,33 @@ struct timespec divide_timespec(struct timespec divident, int divisor) {
 }
 
 /**
- * @brief Add a nanoseconds to a timespec structure
+ * @brief Add miliseconds to a timespec structure
  *
  * @param time Pointer to the timespec structure to be updated
- * @param nsec Number of nanoseconds to add to \p time
+ * @param msec Number of miliseconds to add to \p time
  */
-void update_timer(struct timespec *time, long int nsec) {
+void update_timer_ms(struct timespec *time, long int msec) {
+    // Split ms into seconds and remaining milliseconds
+    time->tv_sec += msec / 1000;         // Add full seconds from milliseconds
+    long int remaining_ms = msec % 1000; // Remaining milliseconds
 
-	// Done this way to take care of additions of more than a second
-	time->tv_nsec += nsec;
-	while(time->tv_nsec > NS_PER_SECOND) {
-		time->tv_sec++;
-		time->tv_nsec -= NS_PER_SECOND;
-	}
+    // Convert remaining milliseconds to nanoseconds
+    long int nsec = remaining_ms * 1000000L;
+
+    // Add the nanoseconds to the timespec
+    time->tv_nsec += nsec;
+
+    // Handle overflow (more than a second)
+    if (time->tv_nsec >= NS_PER_SECOND) {
+        time->tv_sec += time->tv_nsec / NS_PER_SECOND;
+        time->tv_nsec = time->tv_nsec % NS_PER_SECOND;
+    }
+    // Handle underflow (negative nanoseconds)
+    else if (time->tv_nsec < 0) {
+		print_error("Error: Negative nanoseconds on update_times_ms\n");
+        // time->tv_sec += (time->tv_nsec / NS_PER_SECOND) - 1;
+        // time->tv_nsec = NS_PER_SECOND + (time->tv_nsec % NS_PER_SECOND);
+    }
 }
 
 /**
@@ -351,12 +365,17 @@ void update_timer(struct timespec *time, long int nsec) {
  * @return The percentage of \p t2 represented by \p t1
  */
 double calculate_percentage(struct timespec t1, struct timespec t2) {
-    // Convert both timespec values to total nanoseconds
-    long long total_nsecs_t1 = t1.tv_sec * 1000000000LL + t1.tv_nsec;
-    long long total_nsecs_t2 = t2.tv_sec * 1000000000LL + t2.tv_nsec;
+    // Convert t1 and t2 times to nanoseconds as double values to prevent overflow (32-bit systems)
+    double total_nsecs_t1 = (double)t1.tv_sec * 1e9 + (double)t1.tv_nsec;
+    double total_nsecs_t2 = (double)t2.tv_sec * 1e9 + (double)t2.tv_nsec;
+
+	//todo: que no falle cuando long no es de 64bits (en la pynq)
 
     // Calculate the percentage
-    double percentage = (double)total_nsecs_t1 / total_nsecs_t2 * 100.0;
+    if (total_nsecs_t2 == 0) {
+        return 0.0;  // Avoid division by zero
+    }
+    double percentage = (total_nsecs_t1 / total_nsecs_t2) * 100.0;
 
     return percentage;
 }

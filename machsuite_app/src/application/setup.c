@@ -63,7 +63,7 @@
 /************************ Application Constants ******************************/
 
 // Number of kernels to be executed
-#define NUM_KERNELS 1000
+#define NUM_KERNELS 20000
 // Monitoring period in ms
 #define MONITORING_PERIOD_MS 500
 // Number of monitoring windows (-1 if forever)
@@ -1251,7 +1251,7 @@ void* monitoring_thread(void *arg) {
 				clock_gettime(CLOCK_MONOTONIC, &schedule_timer);
 
 				// Increase timer with time_to_wait
-				update_timer(&schedule_timer, time_to_wait_ms * 1000000);  // Convert from ms to nsec
+				update_timer_ms(&schedule_timer, time_to_wait_ms);
 
 				// TODO: Remove. Used for ensuring idle time is properly waited
 				struct timespec t_aux_0;
@@ -1313,7 +1313,7 @@ void* monitoring_thread(void *arg) {
 		// printf("[ONLINE TIME] %ld:%09ld\n", elapsed_online.tv_sec, elapsed_online.tv_nsec);
 
 		// Update timer
-		update_timer(&schedule_timer, monitor_args.period_ms * 1000000);
+		update_timer_ms(&schedule_timer, monitor_args.period_ms);
 
 	}
 
@@ -1397,7 +1397,7 @@ void* CPU_usage_monitor_thread(void *arg){
 
 	struct timespec event_timer;
 	//struct timespec t_aux;
-	int period_in_us = *((int*) arg);
+	int period_in_ms = *((int*) arg);
 
 	// Start event timer
 	clock_gettime(CLOCK_MONOTONIC, &event_timer);
@@ -1415,7 +1415,7 @@ void* CPU_usage_monitor_thread(void *arg){
 		calculate_and_update_cpu_usage(current_cpu_usage, previous_cpu_usage, calculated_cpu_usage);
 
 		// Update timer
-		update_timer(&event_timer, period_in_us * 1000);
+		update_timer_ms(&event_timer, period_in_ms);
 
 	}
 
@@ -1605,9 +1605,9 @@ int main(int argc, char* argv[]) {
 		// CPU Usage
 		#if CPU_USAGE
 			pthread_t cpu_usage_pthread_id;
-			int cpu_usage_monitor_period_us = CPU_USAGE_MONITOR_PERIOD_MS * 1000;
+			int cpu_usage_monitor_period_ms = CPU_USAGE_MONITOR_PERIOD_MS;
 			// Create the thread that calculates the CPU usage
-			ret = pthread_create(&cpu_usage_pthread_id, NULL, &CPU_usage_monitor_thread, &cpu_usage_monitor_period_us);
+			ret = pthread_create(&cpu_usage_pthread_id, NULL, &CPU_usage_monitor_thread, &cpu_usage_monitor_period_ms);
 			if(ret != 0){
 				print_error("Error creating the cpu usage thread\n");
 				exit(1);
@@ -1662,7 +1662,7 @@ int main(int argc, char* argv[]) {
 			//aux_kernel_data.kernel_label = 3; // Always use crs kernel
 			aux_kernel_data.kernel_label = kernel_label_buffer[i];
 			aux_kernel_data.num_executions = num_executions_buffer[i];
-			aux_kernel_data.intended_arrival_time = (long int)(inter_arrival_buffer[i]*1000000L);
+			aux_kernel_data.intended_arrival_time_ms = (long int)(inter_arrival_buffer[i]);
 			aux_kernel_data.slot_id = 0;
 
 			// Initialize arrival and finish time to MAX, this helps managing kernels not finished in online
@@ -1690,7 +1690,7 @@ int main(int argc, char* argv[]) {
 			aux_kernel_data.cu = tmp_cu[rand_value];
 
 			// Generate the arrival timer for each kernel
-			update_timer(&schedule_timer, aux_kernel_data.intended_arrival_time);
+			update_timer_ms(&schedule_timer, aux_kernel_data.intended_arrival_time_ms);
 			aux_kernel_data.commanded_arrival_time = schedule_timer;
 
 			// Add the kernel to the kernel generation queue

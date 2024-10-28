@@ -134,12 +134,12 @@ struct timespec add_timespec(struct timespec a, struct timespec b);
 struct timespec divide_timespec(struct timespec divident, int divisor);
 
 /**
- * @brief Add a nanoseconds to a timespec structure
+ * @brief Add miliseconds to a timespec structure
  *
  * @param time Pointer to the timespec structure to be updated
- * @param nsec Number of nanoseconds to add to \p time
+ * @param msec Number of miliseconds to add to \p time
  */
-void update_timer(struct timespec *time, long int nsec);
+void update_timer_ms(struct timespec *time, long int msec);
 
 
 /************************** ARTICo3 Functions ****************************/

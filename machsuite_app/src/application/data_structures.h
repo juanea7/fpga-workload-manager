@@ -46,7 +46,7 @@ typedef struct{
 	int temp_id;									// kernel order number inside application
 	kernel_label_t kernel_label;					// Kernel label
 	int num_executions;								// Number of executions to be performed by the kernel
-	long int intended_arrival_time;					// Inter-arrival time
+	long int intended_arrival_time_ms;				// Inter-arrival time
 	struct timespec commanded_arrival_time;			// Pretended arrival time
 	struct timespec measured_arrival_time;			// Real arrival time
 	struct timespec measured_finish_time;			// Real execution finished time
