@@ -283,7 +283,7 @@ int dequeue_first_executable_kernel(queue *q, const int free_slots, const int *d
         // Get next node
         tmp = prev->next;
 
-    }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] == 1) );
+    }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] > 0) );
 
     // Save the node we are going to dequeue
     *d = tmp->data;
@@ -304,7 +304,7 @@ int dequeue_first_executable_kernel(queue *q, const int free_slots, const int *d
 }
 
 /**
- * @brief Schedule the least interaction first (LIF) kernel from the queue
+ * @brief Schedule the Least Interaction First (LIF) kernel from the queue
  *
  * @param q Pointer to the queue to dequeue the node from
  * @param free_slots Number of free slots
@@ -318,7 +318,7 @@ int dequeue_first_executable_kernel(queue *q, const int free_slots, const int *d
  * @param predicted_time_alone_map Map with the predicted time alone for each kernel
  * @return (int) 0 on success, error code otherwise
  */
-int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const int *duplicated_kernels, kernel_data *d, const online_models_t *om, const int num_kernels_to_check, const float user_cpu, const float kernel_cpu, const float idle_cpu) {  //TODO: tener un mapa para ahorrar predicciones, const float *predicted_time_alone_map) {
+int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const int *duplicated_kernels, kernel_data *d, const online_models_t *om, const int num_kernels_to_check, const float user_cpu, const float kernel_cpu, const float idle_cpu) {
 
     // Check if the queue is empty
     if(q->head == NULL) return -1;
@@ -335,8 +335,8 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
     int num_kernels_checked = 0;                 // Number of kernels checked
 
     int num_decision_changes = 0;
-    int num_first_kernel_scheduled = 0;
-    int num_other_kernel_scheduled = 0;
+    static int num_first_kernel_scheduled = 0;
+    static int num_other_kernel_scheduled = 0;
 
     // Online models variables
 	online_models_features_t features_alone, features_interaction;
@@ -345,23 +345,19 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
     int tmp_features_alone_array[TYPES_OF_KERNELS] = {0};
     int tmp_features_interaction_array[TYPES_OF_KERNELS];
 
-    printf("[SCHED] Number of kernels to check: %d\n", num_kernels_to_check);
-
     // Special case for HEAD
     if((tmp->data.cu <= free_slots) && (duplicated_kernels[tmp->data.kernel_label] == 0)) {
 
         // TODO: encapsulate this in a function
         // Prepare the features (TODO: change data structure to avoid this)
 
-        printf("[SCHED] # kernel: %d\n", tmp_kernel_index);
-        printf("[SCHED] dup_kernels: %d %d %d %d %d %d %d %d %d %d %d\n", duplicated_kernels[0], duplicated_kernels[1], duplicated_kernels[2], duplicated_kernels[3], duplicated_kernels[4], duplicated_kernels[5], duplicated_kernels[6], duplicated_kernels[7], duplicated_kernels[8], duplicated_kernels[9], duplicated_kernels[10]);
-
         // Features alone
-        tmp_features_alone_array[tmp->data.kernel_label] = 4;
+        tmp_features_alone_array[tmp->data.kernel_label] = 1;
 
         features_alone.user = user_cpu;
         features_alone.kernel = kernel_cpu;
         features_alone.idle = idle_cpu;
+        features_alone.main = tmp->data.kernel_label;
         features_alone.aes = tmp_features_alone_array[0];
         features_alone.bulk = tmp_features_alone_array[1];
         features_alone.crs = tmp_features_alone_array[2];
@@ -376,19 +372,18 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
 
         // Prediction alone
 	    prediction_alone = online_models_predict(om, &features_alone);
-        printf("[SCHED] Alone\n");
-        online_models_print_features(&features_alone);
-        online_models_print_prediction(&prediction_alone);
 
         // Clean the features alone array
         tmp_features_alone_array[tmp->data.kernel_label] = 0;
 
         // Features interaction
         memcpy(tmp_features_interaction_array, duplicated_kernels, sizeof(tmp_features_interaction_array));
+        tmp_features_interaction_array[tmp->data.kernel_label] = tmp->data.cu;
 
         features_interaction.user = user_cpu;
         features_interaction.kernel = kernel_cpu;
         features_interaction.idle = idle_cpu;
+        features_interaction.main = tmp->data.kernel_label;
         features_interaction.aes = tmp_features_interaction_array[0];
         features_interaction.bulk = tmp_features_interaction_array[1];
         features_interaction.crs = tmp_features_interaction_array[2];
@@ -403,10 +398,6 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
 
         // Predict interaction
 	    prediction_interaction = online_models_predict(om, &features_interaction);
-        printf("[SCHED] Interaction\n");
-        online_models_print_features(&features_interaction);
-        online_models_print_prediction(&prediction_interaction);
-
 
         // TODO: remove, debug. Check if the scheduler has taken a decition different that fifo
         num_decision_changes++;
@@ -420,12 +411,7 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
 
         // Increment the number of kernels checked
         num_kernels_checked++;
-        printf("[SCHED] (head) min_kernel_interaction: %f | min_kernel_interaction_index: %d\n", min_kernel_interaction, min_kernel_interaction_index);
-        printf("[SCHED] # kernels checked: %d\n", num_kernels_checked);
     }
-
-    // Increment the temporal kernel index
-    tmp_kernel_index++;
 
     // Loop until we run out of kernels in the queue or we have checked the desired number of kernels
     while(num_kernels_checked < num_kernels_to_check) {
@@ -439,7 +425,7 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
             // TODO: Remove the goto by spliting this function in multiple and return when this condition happen
             // TODO: This is a temporal solution to go out of the nested loop
             if(prev->next == NULL){
-                printf("[SCHED] No more kernels executable in queue\n");
+                // printf("[SCHED] No more kernels executable in queue\n");
                 goto no_more_kernels;
             }
             // Get next node
@@ -447,20 +433,19 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
             // tmp_index
             tmp_kernel_index++;
 
-        }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] == 1) );
+        // }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] == 1) );
+        }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] > 0) );
 
         // TODO: encapsulate this in a function
         // Prepare the features (TODO: change data structure to avoid this)
 
-        printf("[SCHED] # kernel: %d\n", tmp_kernel_index);
-        printf("[SCHED] dup_kernels: %d %d %d %d %d %d %d %d %d %d %d\n", duplicated_kernels[0], duplicated_kernels[1], duplicated_kernels[2], duplicated_kernels[3], duplicated_kernels[4], duplicated_kernels[5], duplicated_kernels[6], duplicated_kernels[7], duplicated_kernels[8], duplicated_kernels[9], duplicated_kernels[10]);
-
         // Features alone
-        tmp_features_alone_array[tmp->data.kernel_label] = 4;
+        tmp_features_alone_array[tmp->data.kernel_label] = 1;
 
         features_alone.user = user_cpu;
         features_alone.kernel = kernel_cpu;
         features_alone.idle = idle_cpu;
+        features_alone.main = tmp->data.kernel_label;
         features_alone.aes = tmp_features_alone_array[0];
         features_alone.bulk = tmp_features_alone_array[1];
         features_alone.crs = tmp_features_alone_array[2];
@@ -475,19 +460,18 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
 
         // Prediction alone
 	    prediction_alone = online_models_predict(om, &features_alone);
-        printf("[SCHED] Alone\n");
-        online_models_print_features(&features_alone);
-        online_models_print_prediction(&prediction_alone);
 
         // Clean the features alone array
         tmp_features_alone_array[tmp->data.kernel_label] = 0;
 
         // Features interaction
         memcpy(tmp_features_interaction_array, duplicated_kernels, sizeof(tmp_features_interaction_array));
+        tmp_features_interaction_array[tmp->data.kernel_label] = tmp->data.cu;
 
         features_interaction.user = user_cpu;
         features_interaction.kernel = kernel_cpu;
         features_interaction.idle = idle_cpu;
+        features_interaction.main = tmp->data.kernel_label;
         features_interaction.aes = tmp_features_interaction_array[0];
         features_interaction.bulk = tmp_features_interaction_array[1];
         features_interaction.crs = tmp_features_interaction_array[2];
@@ -502,32 +486,22 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
 
         // Predict interaction
 	    prediction_interaction = online_models_predict(om, &features_interaction);
-        printf("[SCHED] Interaction\n");
-        online_models_print_features(&features_interaction);
-        online_models_print_prediction(&prediction_interaction);
 
         // Compute the predicted kernel interaction
         tmp_kernel_interaction = (prediction_interaction.time - prediction_alone.time) / prediction_alone.time;
 
-
         // TODO: remove, debug. Check if the scheduler has taken a decition different that fifo
         if (tmp_kernel_interaction < min_kernel_interaction) num_decision_changes++;
-
-
-        printf("[SCHED] (pre) tmp_kernel_interaction: %f | min_kernel_interaction: %f | min_kernel_interaction_index: %d\n", tmp_kernel_interaction, min_kernel_interaction, min_kernel_interaction_index);
-        // Update the minimum kernel interaction
-        min_kernel_interaction = (tmp_kernel_interaction < min_kernel_interaction) ? tmp_kernel_interaction : min_kernel_interaction;
 
         // Update the index of the kernel with the minimum kernel interaction
         min_kernel_interaction_index = (tmp_kernel_interaction < min_kernel_interaction) ? tmp_kernel_index : min_kernel_interaction_index;
 
+        // Update the minimum kernel interaction
+        min_kernel_interaction = (tmp_kernel_interaction < min_kernel_interaction) ? tmp_kernel_interaction : min_kernel_interaction;
+
         // Increment the number of kernels checked
         num_kernels_checked++;
-        printf("[SCHED] (post) tmp_kernel_interaction: %f | min_kernel_interaction: %f | min_kernel_interaction_index: %d\n", tmp_kernel_interaction, min_kernel_interaction, min_kernel_interaction_index);
-        printf("[SCHED] # kernels checked: %d\n", num_kernels_checked);
     }
-
-    printf("[SCHED] No more kernels to check (checked/to_check): (%d/%d)\n", num_kernels_checked, num_kernels_to_check);
 
     no_more_kernels:  // Label to go out of the nested loop when no more kernels are available
 
@@ -540,19 +514,182 @@ int schedule_lif_from_n_executable_kernels(queue *q, const int free_slots, const
         exit(1);
     }
 
-    printf("[SCHED] Dequeued kernel #%d\n", min_kernel_interaction_index);
-
-
     // TODO: remove, debug. Indicate the number of times the scheduler takes a decision different than fifo
-    printf("[SCHED] Number of decision changes: %d\n", num_decision_changes);
-
     if (num_decision_changes == 1)
         num_first_kernel_scheduled++;
     else
         num_other_kernel_scheduled++;
 
-    printf("[SCHED] Number of first kernel scheduled (total): %d (%d)\n", num_first_kernel_scheduled, num_first_kernel_scheduled + num_other_kernel_scheduled);
-    printf("[SCHED] Number of other kernel scheduled (total): %d (%d)\n", num_other_kernel_scheduled, num_first_kernel_scheduled + num_other_kernel_scheduled);
+    return 0;
+}
+
+
+/**
+ * @brief Schedule the Shortest Job First (SJF) kernel from the queue
+ *
+ * @param q Pointer to the queue to dequeue the node from
+ * @param free_slots Number of free slots
+ * @param duplicated_kernels Array indicating wich kernels are duplicated
+ * @param d Pointer where the function will store the dequeued node
+ * @param om Pointer to the online models structure
+ * @param num_kernels_to_check Number of kernels to check
+ * @param user_cpu User CPU usage
+ * @param kernel_cpu Kernel CPU usage
+ * @param idle_cpu Idle CPU usage
+ * @param predicted_time_alone_map Map with the predicted time alone for each kernel
+ * @return (int) 0 on success, error code otherwise
+ */
+int schedule_sjf_from_n_executable_kernels(queue *q, const int free_slots, const int *duplicated_kernels, kernel_data *d, const online_models_t *om, const int num_kernels_to_check, const float user_cpu, const float kernel_cpu, const float idle_cpu) {
+
+    // Check if the queue is empty
+    if(q->head == NULL) return -1;
+
+    // Save the first node
+    node *prev = NULL;
+    node *tmp = q->head;
+
+    // Scheduling variables
+    float min_kernel_time = __FLT_MAX__;  // Stores the mininum predicted kernel interaction
+    int min_kernel_time_index = -1;       // Stores the index of the kernel with the minimum predicted kernel interaction
+    float tmp_kernel_time = 0;            // Temporal kernel interaction variabl
+    int tmp_kernel_index = 0;                    // Temporal kernel index
+    int num_kernels_checked = 0;                 // Number of kernels checked
+
+    int num_decision_changes = 0;
+    static int num_first_kernel_scheduled = 0;
+    static int num_other_kernel_scheduled = 0;
+
+    // Online models variables
+	online_models_features_t features_interaction;
+	online_models_prediction_t prediction_interaction;
+
+    int tmp_features_interaction_array[TYPES_OF_KERNELS];
+
+    // Special case for HEAD
+    if((tmp->data.cu <= free_slots) && (duplicated_kernels[tmp->data.kernel_label] == 0)) {
+
+        // TODO: encapsulate this in a function
+        // Prepare the features (TODO: change data structure to avoid this)
+
+        // Features interaction
+        memcpy(tmp_features_interaction_array, duplicated_kernels, sizeof(tmp_features_interaction_array));
+        tmp_features_interaction_array[tmp->data.kernel_label] = tmp->data.cu;
+
+        features_interaction.user = user_cpu;
+        features_interaction.kernel = kernel_cpu;
+        features_interaction.idle = idle_cpu;
+        features_interaction.main = tmp->data.kernel_label;
+        features_interaction.aes = tmp_features_interaction_array[0];
+        features_interaction.bulk = tmp_features_interaction_array[1];
+        features_interaction.crs = tmp_features_interaction_array[2];
+        features_interaction.kmp = tmp_features_interaction_array[3];
+        features_interaction.knn = tmp_features_interaction_array[4];
+        features_interaction.merge = tmp_features_interaction_array[5];
+        features_interaction.nw = tmp_features_interaction_array[6];
+        features_interaction.queue = tmp_features_interaction_array[7];
+        features_interaction.stencil2d = tmp_features_interaction_array[8];
+        features_interaction.stencil3d = tmp_features_interaction_array[9];
+        features_interaction.strided = tmp_features_interaction_array[10];
+
+        // Predict interaction
+	    prediction_interaction = online_models_predict(om, &features_interaction);
+
+        // TODO: remove, debug. Check if the scheduler has taken a decition different that fifo
+        num_decision_changes++;
+
+
+        // Compute the predicted kernel interaction
+        min_kernel_time = prediction_interaction.time * tmp->data.num_executions;
+
+        // Set the kernel index
+        min_kernel_time_index = 0;
+
+        // Increment the number of kernels checked
+        num_kernels_checked++;
+    }
+
+    // Loop until we run out of kernels in the queue or we have checked the desired number of kernels
+    while(num_kernels_checked < num_kernels_to_check) {
+
+        // Rest of the cases
+        do {
+
+            // Save previous node
+            prev = tmp;
+            // Check if exist a node at that position
+            // TODO: Remove the goto by spliting this function in multiple and return when this condition happen
+            // TODO: This is a temporal solution to go out of the nested loop
+            if(prev->next == NULL){
+                goto no_more_kernels;
+            }
+            // Get next node
+            tmp = prev->next;
+            // tmp_index
+            tmp_kernel_index++;
+            // printf("[SCHED] Next kernel will be # kernel: %d\n", tmp_kernel_index);
+
+        // }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] == 1) );
+        }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] > 0) );
+
+        // TODO: encapsulate this in a function
+        // Prepare the features (TODO: change data structure to avoid this)
+
+        // Features interaction
+        memcpy(tmp_features_interaction_array, duplicated_kernels, sizeof(tmp_features_interaction_array));
+        tmp_features_interaction_array[tmp->data.kernel_label] = tmp->data.cu;
+
+        features_interaction.user = user_cpu;
+        features_interaction.kernel = kernel_cpu;
+        features_interaction.idle = idle_cpu;
+        features_interaction.main = tmp->data.kernel_label;
+        features_interaction.aes = tmp_features_interaction_array[0];
+        features_interaction.bulk = tmp_features_interaction_array[1];
+        features_interaction.crs = tmp_features_interaction_array[2];
+        features_interaction.kmp = tmp_features_interaction_array[3];
+        features_interaction.knn = tmp_features_interaction_array[4];
+        features_interaction.merge = tmp_features_interaction_array[5];
+        features_interaction.nw = tmp_features_interaction_array[6];
+        features_interaction.queue = tmp_features_interaction_array[7];
+        features_interaction.stencil2d = tmp_features_interaction_array[8];
+        features_interaction.stencil3d = tmp_features_interaction_array[9];
+        features_interaction.strided = tmp_features_interaction_array[10];
+
+        // Predict interaction
+	    prediction_interaction = online_models_predict(om, &features_interaction);
+
+        // Compute the predicted kernel interaction
+        tmp_kernel_time = prediction_interaction.time * tmp->data.num_executions;
+
+
+        // TODO: remove, debug. Check if the scheduler has taken a decition different that fifo
+        if (tmp_kernel_time < min_kernel_time) num_decision_changes++;
+
+        // Update the index of the kernel with the minimum kernel interaction
+        min_kernel_time_index = (tmp_kernel_time < min_kernel_time) ? tmp_kernel_index : min_kernel_time_index;
+
+        // Update the minimum kernel interaction
+        min_kernel_time = (tmp_kernel_time < min_kernel_time) ? tmp_kernel_time : min_kernel_time;
+
+        // Increment the number of kernels checked
+        num_kernels_checked++;
+    }
+
+    no_more_kernels:  // Label to go out of the nested loop when no more kernels are available
+
+    // Return -1 if no kernel was found
+    if (min_kernel_time_index < 0) return -1;
+
+    // Dequeue the kernel with the least interference
+    if(dequeue_from(q, min_kernel_time_index, d) < 0){
+        print_error("Error dequeuing kernel from queue when scheduling\n");
+        exit(1);
+    }
+
+    // TODO: remove, debug. Indicate the number of times the scheduler takes a decision different than fifo
+    if (num_decision_changes == 1)
+        num_first_kernel_scheduled++;
+    else
+        num_other_kernel_scheduled++;
 
     return 0;
 }

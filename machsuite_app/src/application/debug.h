@@ -30,20 +30,24 @@
     #define MONITOR 1
 #endif
 
+#ifndef SCHEDULER
+    #define SCHEDULER 0
+#endif
+
 #ifndef ONLINE_MODELS
-    #define ONLINE_MODELS 0
+    #define ONLINE_MODELS 1
 #endif
 
 #ifndef EXECUTION_MODES
-    #define EXECUTION_MODES 0
+    #define EXECUTION_MODES 1
 #endif
 
 #ifndef CPU_USAGE
-    #define CPU_USAGE 0
+    #define CPU_USAGE 1
 #endif
 
 #ifndef TRACES_RAM
-    #define TRACES_RAM 0
+    #define TRACES_RAM 1
 #endif
 
 #ifndef TRACES_ROM

@@ -672,28 +672,42 @@ void* queue_manager_thread(void *arg) {
 
 			clock_gettime(CLOCK_MONOTONIC, &t_start_schedule);
 
-			if (monitoring_mode == IDLE) {
+			// Schedule the kernel
+			#if SCHEDULER
+				if (monitoring_mode == IDLE) {
 
-				float user_cpu = calculated_cpu_usage[0];
-				float kernel_cpu = calculated_cpu_usage[1];
-				float idle_cpu = calculated_cpu_usage[2];
+					#if CPU_USAGE
+						float user_cpu = calculated_cpu_usage[0];
+						float kernel_cpu = calculated_cpu_usage[1];
+						float idle_cpu = calculated_cpu_usage[2];
+					#else	// Just a place holder for arguments in future functions (not the proper way of doing thing // TODO)
+						float user_cpu = 0;
+						float kernel_cpu = 0;
+						float idle_cpu = 0;
+					#endif
 
-				if (schedule_lif_from_n_executable_kernels(
-					&kernel_execution_queue,
-					free_slots_tmp,
-					duplicated_kernels_tmp,
-					&kernel_tmp,
-					&online_models,
-					2,  // TODO: can be modified, place in a macro
-					user_cpu,
-					kernel_cpu,
-					idle_cpu) < 0) // TODO: conseguir un mapa tras entrenar (no tenemos info de si está entrenado el sistema)
-					end_of_queue_flag = 1;
-			}
-			else {
+					#if ONLINE_MODELS
+						if (schedule_lif_from_n_executable_kernels(
+							&kernel_execution_queue,
+							free_slots_tmp,
+							duplicated_kernels_tmp,
+							&kernel_tmp,
+							&online_models,
+							2,
+							user_cpu,
+							kernel_cpu,
+							idle_cpu) < 0) // TODO: conseguir un mapa tras entrenar (no tenemos info de si está entrenado el sistema)
+							end_of_queue_flag = 1;
+					#endif
+				}
+				else {
+					if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
+						end_of_queue_flag = 1;
+				}
+			#else
 				if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
 					end_of_queue_flag = 1;
-			}
+			#endif
 
 			clock_gettime(CLOCK_MONOTONIC, &t_end_schedule);
 			t_schedule_elapsed_time = diff_timespec(t_start_schedule, t_end_schedule);
@@ -739,7 +753,7 @@ void* queue_manager_thread(void *arg) {
 				print_error("duplicated_kernel_lock_1\n");
 				exit(1);
 			}
-			duplicated_kernel_variable[kernel_tmp.kernel_label]++;
+			duplicated_kernel_variable[kernel_tmp.kernel_label] = kernel_tmp.cu;
 			if(pthread_mutex_unlock(&duplicated_kernel_lock) < 0) {
 				print_error("duplicated_kernel_unlock_1\n");
 				exit(1);
@@ -822,7 +836,7 @@ void* queue_manager_thread(void *arg) {
 				// test
 				/*#if ONLINE_MODELS
 					{
-					online_models_features_t features_test = {0,0,1,0,2,0,1,0,1,0,0};
+					online_models_features_t features_test = {2,0,0,1,0,2,0,1,0,1,0,0};
 					online_models_prediction_t prediction_test;
 					prediction_test = online_models_predict(&online_models, &features_test);
 					online_models_print_features(&features_test);
@@ -856,7 +870,6 @@ void* queue_manager_thread(void *arg) {
 			print_error("Queue Manager - pthread_mutex_unlock (end workload)\n");
 			exit(1);
 		}
-
 	}
 
 	// TODO: Remove. Get end time
@@ -941,7 +954,7 @@ void* execution_thread(void *arg) {
 		print_error("duplicated_kernel_lock_1\n");
 		exit(1);
 	}
-	duplicated_kernel_variable[kernel->kernel_label]--;
+	duplicated_kernel_variable[kernel->kernel_label] = 0;
 	if(pthread_mutex_unlock(&duplicated_kernel_lock) < 0) {
 		print_error("duplicated_kernel_unlock\n");
 		exit(1);
@@ -1108,6 +1121,7 @@ void* monitoring_thread(void *arg) {
 			float kernel_cpu = 0;
 			float idle_cpu = 0;
 		#endif
+
 		// Start monitor
 		monitor_start();
 

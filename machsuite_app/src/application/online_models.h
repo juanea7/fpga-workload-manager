@@ -21,6 +21,7 @@ typedef struct online_models_features_t{
     float user;
     float kernel;
     float idle;
+    uint8_t main;
     uint8_t aes;
     uint8_t bulk;
     uint8_t crs;

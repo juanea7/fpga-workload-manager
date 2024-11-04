@@ -57,6 +57,7 @@ void online_models_print_features(const online_models_features_t *omf) {
 	printf("USER:      %f\n", omf->user);
 	printf("KERNEL:    %f\n", omf->kernel);
 	printf("IDLE:      %f\n", omf->idle);
+	printf("MAIN:      %d\n", omf->main);
 	printf("AES:       %d\n", omf->aes);
 	printf("BULK:      %d\n", omf->bulk);
 	printf("CRS:       %d\n", omf->crs);
@@ -166,7 +167,7 @@ int online_models_clean(const online_models_t *om) {
 
 	// test
 	{
-	online_models_features_t features_test = {58.08,33.33,8.59,2,0,0,1,0,1,0,1,4,0,0};
+	online_models_features_t features_test = {58.08,33.33,8.59,7,2,0,0,1,0,1,0,1,4,0,0};
 	online_models_prediction_t prediction_test;
 	prediction_test = online_models_predict(om, &features_test);
 	online_models_print_features(&features_test);
