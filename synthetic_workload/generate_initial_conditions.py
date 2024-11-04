@@ -48,24 +48,20 @@ def num_executions_generator(base, multiples, num_elements, seed = 42):
 def save_generated_initial_conditions(inter_arrival_values, kernel_id_values, num_executions_values):
 
     # Create folder for setup generated initial conditions
-    if not os.path.exists('../initial_conditions'):
-        os.makedirs('../initial_conditions')
+    if not os.path.exists('initial_conditions'):
+        os.makedirs('initial_conditions')
 
-    # Create folder for output experimental data
-    if not os.path.exists('output'):
-        os.makedirs('output')
-
-    file = open("../initial_conditions/inter_arrival.bin", "wb")
+    file = open("initial_conditions/inter_arrival.bin", "wb")
     for value in inter_arrival_values:
         file.write(struct.pack('f', value))
     file.close()
 
-    file = open("../initial_conditions/kernel_id.bin", "wb")
+    file = open("initial_conditions/kernel_id.bin", "wb")
     for value in kernel_id_values:
         file.write(struct.pack('i', value))
     file.close()
 
-    file = open("../initial_conditions/num_executions.bin", "wb")
+    file = open("initial_conditions/num_executions.bin", "wb")
     for value in num_executions_values:
         file.write(struct.pack('i', value))
     file.close()
@@ -95,7 +91,7 @@ def print_kernerl_inter_arrival_data(list_values):
     # histogram
     count, bins, ignored = plt.hist(list_values, 200, density=True)
 
-    plt.savefig('../initial_conditions/inter_arrival_distribution.png')
+    plt.savefig('initial_conditions/inter_arrival_distribution.png')
     plt.close()
 
 # Print kernel id distributions
@@ -104,7 +100,7 @@ def print_kernel_id_data(list_values, divs):
     # histogram
     count, bins, ignored = plt.hist(list_values, divs, density=True)
 
-    plt.savefig('../initial_conditions/kernel_id_distribution.png')
+    plt.savefig('initial_conditions/kernel_id_distribution.png')
     plt.close()
 
 # Print kernel number of executions dritributions
@@ -113,7 +109,7 @@ def print_num_executions_data(list_values,divs):
     # histogram
     count, bins, ignored = plt.hist(list_values, divs, density=True)
 
-    plt.savefig('../initial_conditions/num_executions_distribution.png')
+    plt.savefig('initial_conditions/num_executions_distribution.png')
     plt.close()
 
 
