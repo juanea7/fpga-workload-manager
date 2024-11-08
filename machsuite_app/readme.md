@@ -1,6 +1,6 @@
 # Workload Manager
 
-This folder contains the source code and related files for the Workload Manager. The Workload Manager is designed to manage and execute various computational kernels, providing monitoring, scheduling and power/performance prediction functionalities.
+This folder contains the source code and related files for the Workload Manager. The Workload Manager is designed to manage and execute dynamic workloads in FPGAs, providing monitoring, scheduling and power/performance prediction functionalities.
 
 ## Related Components:
 
