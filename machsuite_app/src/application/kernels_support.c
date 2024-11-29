@@ -4,7 +4,7 @@
  * @brief This file contains the functions used to perform the configuration
  * 		  and execution of each kernel in the FPGA using ARTICo3
  * @date September 2022
- * 
+ *
  */
 
 // TODO: error codes
@@ -69,6 +69,7 @@ typedef void (*kernel_output_to_data_t)(int,void*);
 typedef int (*kernel_check_data_t)(void*,void*);
 
 // Input to data funtion array
+#if ARTICO
 static kernel_input_to_data_t _kernel_input_to_data[TYPES_OF_KERNELS] = {
 	aes_input_to_data,
 	bulk_input_to_data,
@@ -112,6 +113,8 @@ static kernel_check_data_t _kernel_check_data[TYPES_OF_KERNELS] = {
 	stencil3d_check_data,
 	strided_check_data
 };
+#endif
+
 
 // Kernel names
 static char _kernel_names [TYPES_OF_KERNELS][15] = {
@@ -138,11 +141,11 @@ static char* _kernel_reference_data[TYPES_OF_KERNELS];
 /**
  * @brief Enqueue online processing info of a particular kernel in the online
  * 		  queues specific to the slots in which is executed (internal function)
- * 
+ *
  * @param online_queue Array of all the online queues (one per ARTICo3 slot)
  * @param online_queue_lock Pointer to the mutex used to synchronize the online queue of the slot where the kernel executes
  * @param kernel Pointer to the kernel_data of the kernel executed
- * @return (int) 0 on success, error code otherwise 
+ * @return (int) 0 on success, error code otherwise
  */
 static int _kernel_to_online_queue(queue_online *online_queue, pthread_mutex_t *online_queue_lock, kernel_data *kernel) {
 
@@ -157,7 +160,7 @@ static int _kernel_to_online_queue(queue_online *online_queue, pthread_mutex_t *
 	for(i = 0, j = 0; i < kernel->cu; j++) {
 
 		// When a kernel replica is found in a slot, the kernel data is enqueue in the online queue of that particular slot
-		if((kernel->slot_id & (1 << j)) > 0) { 
+		if((kernel->slot_id & (1 << j)) > 0) {
 
 			// Lock the online queue of each ARTICo3 slot where the kernel has a replica executing to place kernel info
 			if(pthread_mutex_lock(&(online_queue_lock[j])) < 0) {
@@ -184,13 +187,13 @@ static int _kernel_to_online_queue(queue_online *online_queue, pthread_mutex_t *
 	}
 
 	print_debug("Execution - Post-add online info queue\n");
-	
+
 	return 0;
 }
 
 /**
  * @brief Print whether the kernel has been successfully executed or not (internal function)
- * 
+ *
  * @param success Flag indicating if the kernel has succeded (1 when success, 0 when fail)
  * @param kernel_name Kernal label to be printed
  */
@@ -206,11 +209,12 @@ static void _print_kernel_success(const int success, char *kernel_name) {
 
 /**
  * @brief Kernel input size calculation loading
- * 
+ *
  * @param input_size_array Array containing input sizes of the kernels
  */
 static void _kernel_calculate_input_size(int *input_size_array) {
-	
+
+	#if ARTICO
 	input_size_array[0] = AES_INPUT_SIZE;
 	input_size_array[1] = BULK_INPUT_SIZE;
 	input_size_array[2] = CRS_INPUT_SIZE;
@@ -222,19 +226,20 @@ static void _kernel_calculate_input_size(int *input_size_array) {
 	input_size_array[8] = STENCIL2D_INPUT_SIZE;
 	input_size_array[9] = STENCIL3D_INPUT_SIZE;
 	input_size_array[10] = STRIDED_INPUT_SIZE;
+	#endif
 }
 
 /**
  * @brief Kernel input data loading
- * 
+ *
  * @param input_data Pointer to the input data
  * @param kernel Kernel label enum
  */
 static void _kernel_load_input(char **input_data, kernel_label_t kernel) {
-	
+
 	print_debug("Loading Kernel #%s Data...\n", _kernel_names[kernel]);
 
-	#if ARTICO 
+	#if ARTICO
 
     char in_file[40];
 	sprintf(in_file, "data/%s/input.data", _kernel_names[kernel]);
@@ -253,18 +258,18 @@ static void _kernel_load_input(char **input_data, kernel_label_t kernel) {
 	}
 
 	_kernel_input_to_data[kernel](in_fd, *input_data);
-	
+
 	#endif
 }
 
 /**
  * @brief Kernel reference data loading
- * 
+ *
  * @param reference_data Pointer to the reference data
  * @param kernel Kernel label enum
  */
 static void _kernel_load_reference(char **reference_data, kernel_label_t kernel) {
-	
+
 	print_debug("Loading Kernel #%s Check Data...\n", _kernel_names[kernel]);
 
 	#if ARTICO
@@ -286,18 +291,18 @@ static void _kernel_load_reference(char **reference_data, kernel_label_t kernel)
 	}
 
 	_kernel_output_to_data[kernel](check_fd, *reference_data);
-	
+
 	#endif
 }
 
 /**
  * @brief Kernel file data clean-up
- * 
+ *
  * @param input_data Pointer to the input data
  * @param reference_data Pointer to the reference data
  */
 static void _kernel_file_data_clean(char **input_data, char **reference_data) {
-	
+
 	free(*input_data);
 	free(*reference_data);
 	*input_data = NULL;
@@ -306,7 +311,7 @@ static void _kernel_file_data_clean(char **input_data, char **reference_data) {
 
 /**
  * @brief Kernel input and reference data initialization
- * 
+ *
  */
 void kernel_init_data() {
 
@@ -326,7 +331,7 @@ void kernel_init_data() {
 
 /**
  * @brief Kernel input and reference data clean-up
- * 
+ *
  */
 void kernel_clean_data() {
 
@@ -340,12 +345,12 @@ void kernel_clean_data() {
 
 /**
  * @brief Kernel input data copying
- * 
+ *
  * @param io_data Pointer to store the copied input data in
  * @param kernel Kernel label enum
  */
 void kernel_copy_input(char **io_data, kernel_label_t kernel) {
-	
+
 	print_debug("Copying #%s Data...\n", _kernel_names[kernel]);
 
 	#if ARTICO
@@ -359,21 +364,21 @@ void kernel_copy_input(char **io_data, kernel_label_t kernel) {
 
 	// Copy the input data
 	memcpy(*io_data, _kernel_input_data[kernel], _kernel_input_size[kernel]);
-	
+
 	#endif
 }
 
 /**
  * @brief Kernel result validation
- * 
+ *
  * @param output_data Pointer to the output data
  * @param kernel Kernel label enum
  */
 void kernel_result_validation(char **output_data, kernel_label_t kernel) {
-	
+
 	print_debug("Validation #%s Output...\n", _kernel_names[kernel]);
 
-	#if ARTICO 
+	#if ARTICO
 
 	// Validate HW benchmark results
 	int error = 0;
@@ -386,25 +391,25 @@ void kernel_result_validation(char **output_data, kernel_label_t kernel) {
 
 	// Print info about success or fail
 	_print_kernel_success(error == 0, _kernel_names[kernel]);
-	
+
 	#endif
 }
 
 /**
  * @brief AES kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param aes_vargs Pointer to the kernel inputs and outputs buffers
  */
-void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *aes_vargs) {  
-	
+void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *aes_vargs) {
+
 	print_debug("Execution AES...\n");
 
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -417,7 +422,7 @@ void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Load "cu" aes accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("aes", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -433,7 +438,7 @@ void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	a3data_t *aes_deckey = artico3_alloc(sizeof(*aes_deckey), "aes", "aes_deckey", A3_P_I);
 	a3data_t *aes_k = artico3_alloc(sizeof(*aes_k) * executions * 32, "aes", "aes_k", A3_P_I);
 	a3data_t *aes_buf = artico3_alloc(sizeof(*aes_buf) * executions * 16, "aes", "aes_buf", A3_P_IO);
-	
+
 	if(aes_key == NULL || aes_enckey == NULL || aes_deckey == NULL || aes_k == NULL || aes_buf == NULL) {
 		print_error("[Kernel - ARTICo3] Error when allocating memory (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
@@ -465,7 +470,7 @@ void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("aes");
 	if(ret != 0) {
@@ -510,7 +515,7 @@ void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -529,21 +534,21 @@ void aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief BULK kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param bulk_vargs Pointer to the kernel inputs and outputs buffers
  */
-void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *bulk_vargs) {  
-	
+void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *bulk_vargs) {
+
 	print_debug("Execution BULK...\n");
 	/* Execution */
 
@@ -560,7 +565,7 @@ void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mut
 
 	// Load "cu" bulk accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("bulk", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -594,7 +599,7 @@ void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mut
 			bulk_pack[i*(3*BULK_N_NODES + BULK_N_LEVELS + 1) + (2*BULK_N_NODES) + 1 + j] = bulk_args->level[j];
 		}
 		bulk_pack[i*(3*BULK_N_NODES + BULK_N_LEVELS + 1) + (2*BULK_N_NODES)] = bulk_args->starting_node;
-		
+
 		// Initialize output (sometimes the output value is kept as when the execution started, expecting it to be zero, but the artico3_alloc()
 		// sometimes put trash on it, so it's important to initialize the values to 0 (the struct bulk_bench_args_t is memset to 0 in input_to_data()))
 		for(j = 0; j < BULK_N_LEVELS; j++) {
@@ -618,7 +623,7 @@ void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mut
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("bulk");
 	if(ret != 0) {
@@ -649,7 +654,7 @@ void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mut
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -668,26 +673,26 @@ void bulk_execution(kernel_data *kernel, queue_online *online_queue, pthread_mut
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief CRS kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param crs_vargs Pointer to the kernel inputs and outputs buffers
  */
-void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *crs_vargs) {  
-	
+void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *crs_vargs) {
+
 	print_debug("Execution CRS... executions = %d\n", kernel->num_executions);
-	
+
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -700,7 +705,7 @@ void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Load "cu" crs accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("crs", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -757,7 +762,7 @@ void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("crs");
 	if(ret != 0) {
@@ -802,7 +807,7 @@ void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -811,7 +816,7 @@ void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 			i++;
 		}
 	}
-	
+
 	#else
 
 	#if MONITOR
@@ -821,26 +826,26 @@ void crs_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief KMP kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param kmp_vargs Pointer to the kernel inputs and outputs buffers
  */
-void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *kmp_vargs) {  
-	
+void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *kmp_vargs) {
+
 	print_debug("Execution KMP... executions = %d\n", kernel->num_executions);
-	
+
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -853,7 +858,7 @@ void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Load "cu" kmp accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("kmp", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -901,7 +906,7 @@ void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("kmp");
 	if(ret != 0) {
@@ -929,7 +934,7 @@ void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -948,26 +953,26 @@ void kmp_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief KNN kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param knn_vargs Pointer to the kernel inputs and outputs buffers
  */
-void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *knn_vargs) {  
+void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *knn_vargs) {
 
 	print_debug("Execution KNN... -> slot#%d\n",kernel->slot_id);
 
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -980,7 +985,7 @@ void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Load "cu" knn accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("knn", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -993,7 +998,7 @@ void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	// Allocate ARTICo3 Buffers
 	a3data_t *KNN_NL = artico3_alloc(sizeof(*KNN_NL) * executions * knn_nAtoms * knn_maxNeighbors, "knn", "KNN_NL", A3_P_I);
 	a3data_t *knn_pack = artico3_alloc(sizeof(*knn_pack) * executions * 6 * knn_nAtoms, "knn", "knn_pack", A3_P_IO);
-	
+
 	if(KNN_NL == NULL || knn_pack == NULL) {
 		print_error("[Kernel - ARTICo3] Error when allocating memory (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
@@ -1065,7 +1070,7 @@ void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1084,23 +1089,23 @@ void knn_execution(kernel_data *kernel, queue_online *online_queue, pthread_mute
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief MERGE kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param merge_vargs Pointer to the kernel inputs and outputs buffers
  */
-void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *merge_vargs) {  
-	
+void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *merge_vargs) {
+
 	print_debug("Execution MERGE...\n");
-	
+
 	/* Execution */
 
 	#if ARTICO
@@ -1116,7 +1121,7 @@ void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 
 	// Load "cu" merge accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("merge", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1157,7 +1162,7 @@ void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("merge");
 	if(ret != 0) {
@@ -1173,7 +1178,7 @@ void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 		merge_args->a[j] = merge_a[j];
 	}
 
-	// ARTICo3 Free Buffer and release kernels	
+	// ARTICo3 Free Buffer and release kernels
 	ret = artico3_free("merge", "merge_a");
 	if(ret != 0) {
 		print_error("[Kernel - ARTICo3] Error when freeing memory (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1182,7 +1187,7 @@ void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 
 	// Unload "cu" accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_unload(j);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when unloading a kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1201,23 +1206,23 @@ void merge_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
-	
+	usleep(execution_rand);
+
 	#endif
 }
 
 /**
  * @brief NW kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param nw_vargs Pointer to the kernel inputs and outputs buffers
  */
-void nw_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *nw_vargs) {  
-	
+void nw_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *nw_vargs) {
+
 	print_debug("Execution NW...\n");
-	
+
 	/* Execution */
 
 	#if ARTICO
@@ -1233,7 +1238,7 @@ void nw_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex
 
 	// Load "cu" nw accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("nw", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1283,7 +1288,7 @@ void nw_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("nw");
 	if(ret != 0) {
@@ -1338,26 +1343,26 @@ void nw_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
-	
+	usleep(execution_rand);
+
 	#endif
 }
 
 /**
  * @brief QUEUE kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param queue_vargs Pointer to the kernel inputs and outputs buffers
  */
-void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *queue_vargs) {  
-	
+void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *queue_vargs) {
+
 	print_debug("Execution QUEUE...\n");
-	
+
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -1370,7 +1375,7 @@ void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 
 	// Load "cu" queue accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("queue", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1402,7 +1407,7 @@ void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 			queue_pack[i*(3*QUEUE_N_NODES + QUEUE_N_LEVELS + 1) + (2*QUEUE_N_NODES) + 1 + j] = queue_args->level[j];
 		}
 		queue_pack[i*(3*QUEUE_N_NODES + QUEUE_N_LEVELS + 1) + (2*QUEUE_N_NODES)] = queue_args->starting_node;
-		
+
 		// Initialize output (sometimes the output value is kept as when the execution started, expecting it to be zero, but the artico3_alloc()
 		// sometimes put trash on it, so it's important to initialize the values to 0 (the struct bulk_bench_args_t is memset to 0 in input_to_data()))
 		for(j = 0; j < QUEUE_N_LEVELS; j++) {
@@ -1425,7 +1430,7 @@ void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("queue");
 	if(ret != 0) {
@@ -1475,23 +1480,23 @@ void queue_execution(kernel_data *kernel, queue_online *online_queue, pthread_mu
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief STENCIL2D kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param stencil2d_vargs Pointer to the kernel inputs and outputs buffers
  */
-void stencil2d_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *stencil2d_vargs) {  
-	
+void stencil2d_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *stencil2d_vargs) {
+
 	print_debug("Execution STENCIL2D...\n");
-	
+
 	/* Execution */
 
 	#if ARTICO
@@ -1507,7 +1512,7 @@ void stencil2d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 
 	// Load "cu" stencil2d accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("stencil2d", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1553,7 +1558,7 @@ void stencil2d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("stencil2d");
 	if(ret != 0) {
@@ -1607,23 +1612,23 @@ void stencil2d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief STENCIL3D kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param stencil3d_vargs Pointer to the kernel inputs and outputs buffers
  */
-void stencil3d_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *stencil3d_vargs) {  
-	
+void stencil3d_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *stencil3d_vargs) {
+
 	print_debug("Execution STENCIL3D...\n");
-	
+
 	/* Execution */
 
 	#if ARTICO
@@ -1639,7 +1644,7 @@ void stencil3d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 
 	// Load "cu" stencil3d accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("stencil3d", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1685,7 +1690,7 @@ void stencil3d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("stencil3d");
 	if(ret != 0) {
@@ -1739,26 +1744,26 @@ void stencil3d_execution(kernel_data *kernel, queue_online *online_queue, pthrea
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
 
 /**
  * @brief STRIDED kernel configuration and execution in the FPGA via ARTICo3
- * 
+ *
  * @param kernel kernel information
  * @param online_queue Array of online queues
  * @param online_queue_lock Array of online queues mutexes
  * @param strided_vargs Pointer to the kernel inputs and outputs buffers
  */
-void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *strided_vargs) {  
-	
+void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *strided_vargs) {
+
 	print_debug("Execution STRIDED...\n");
-	
+
 	/* Execution */
 
-	#if ARTICO 
+	#if ARTICO
 
 	int i,j,ret;
 
@@ -1771,7 +1776,7 @@ void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_
 
 	// Load "cu" strided accelerators
 	for(i = 0, j = 0; i < cu; j++) {
-		if((slot_id & (1 << j)) > 0) { 
+		if((slot_id & (1 << j)) > 0) {
 			ret = artico3_load("strided", j, 0, 0, 1);
 			if(ret != 0) {
 				print_error("[Kernel - ARTICo3] Error when loading kernel (%d). k_id: %d\n", ret, kernel->temp_id);
@@ -1820,7 +1825,7 @@ void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_
 		print_error("[Kernel - ARTICo3] Error when executing kernel (%d). k_id: %d\n", ret, kernel->temp_id);
 		exit(1);
 	}
-	
+
 	// Wait kernel
   	ret = artico3_kernel_wait("strided");
 	if(ret != 0) {
@@ -1880,7 +1885,7 @@ void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_
 	// Simulate execution (remove when using artico)
 	int execution_rand = ((rand()%4)+7)*1000;  // [7,11) ms
 	print_debug("Tiempo Ejecucion: %d\n",execution_rand);
-	usleep(execution_rand); 
+	usleep(execution_rand);
 
 	#endif
 }
