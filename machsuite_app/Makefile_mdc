@@ -1,0 +1,79 @@
+#
+# ARTICo3 Linux Application
+#
+# Author   : Alfonso Rodriguez <alfonso.rodriguezm@upm.es>
+# Date     : March 2020
+#
+
+
+CC = $(CROSS_COMPILE)gcc
+MAKE = make
+
+CFLAGS_ARTICo3D = $(CFLAGS_IN)-DZYNQMP -Wall -Wextra -fpic -I ../../../fpga-monitor/artico3_integration/artico3/linux -I ../../../fpga-monitor/artico3_integration/artico3/lib/runtime/common
+LDFLAGS_ARTICo3D = -Wl,-R,. -shared
+LDLIBS_ARTICo3D = -lm -lpthread -lrt
+
+CFLAGS_ARTICo3 = $(CFLAGS_IN)-DZYNQMP -Wall -Wextra -fpic -I ../../../fpga-monitor/artico3_integration/artico3/lib/runtime/common
+LDFLAGS_ARTICo3 = -Wl,-R,. -shared
+LDLIBS_ARTICo3 = -lm -lpthread -lrt
+
+CFLAGS_APP = $(CFLAGS_IN)-Wall -Wextra -I runtime/user -I runtime/common -I ../../../fpga-monitor/linux -O3
+LDFLAGS_APP = $(LDFLAGS_IN)-L . -Wl,-R,. 
+LDLIBS_APP = -lartico3 -lm -lpthread -lrt -lm
+
+CFLAGS_DAEMON = $(CFLAGS_IN)-Wall -Wextra -I runtime/daemon -I runtime/common -O3
+LDFLAGS_DAEMON = $(LDFLAGS_IN)-L . -Wl,-R,. 
+LDLIBS_DAEMON = -lartico3d -lm -lpthread -lrt -lm
+
+OBJS1 = runtime/daemon/artico3_rcfg.o runtime/daemon/artico3_hw.o runtime/daemon/artico3_pool.o runtime/daemon/artico3.o
+ARTICo3D_OBJS = $(OBJS1:%=_build/%)
+
+OBJS2 = runtime/user/artico3.o
+ARTICo3_OBJS = $(OBJS2:%=_build/%)
+
+OBJS3 = runtime/daemon/artico3d.o
+DAEMON_OBJS = $(OBJS3:%=_build/%)
+
+OBJS4 = application/setup.o application/execution_modes_buffers.o application/thread_pool.o application/queue_traces.o application/support.o application/cpu_usage.o application/queue_kernel.o application/client_socket_tcp.o application/kernels_support.o application/online_models.o application/client_socket_udp.o application/queue_online.o application/ping_pong_buffers.o application/kernels/queue_support.o application/kernels/merge_support.o application/kernels/strided_support.o application/kernels/crs_support.o application/kernels/machsuite_support.o application/kernels/aes_support.o application/kernels/knn_support.o application/kernels/bulk_support.o application/kernels/stencil2d_support.o application/kernels/kmp_support.o application/kernels/nw_support.o application/kernels/stencil3d_support.o application/mdc/mdc_support.o application/mdc/dma_simplemode.o  application/mdc/unified_monitor/unified_monitor.o application/mdc/unified_monitor/upm_monitor/monitor_hw.o application/mdc/unified_monitor/upm_monitor/monitor.o application/mdc/unified_monitor/unica_monitor/powermon.o
+APP_OBJS = $(OBJS4:%=_build/%)
+
+MKDIRP = mkdir -p
+CPF = cp -f
+
+.PHONY: app
+app: runtime_user $(APP_OBJS)
+	$(CC) $(LDFLAGS_APP) $(APP_OBJS) $(LDLIBS_APP) -o machsuite
+
+.PHONY: daemon
+daemon: runtime_daemon $(DAEMON_OBJS)
+	$(CC) $(LDFLAGS_DAEMON) $(DAEMON_OBJS) $(LDLIBS_DAEMON) -o daemon
+
+.PHONY: runtime_user
+runtime_user: $(ARTICo3_OBJS)
+	$(CC) $(LDFLAGS_ARTICo3) $^ $(LDLIBS_ARTICo3) -o libartico3.so
+	$(AR) rcs libartico3.a $^
+
+.PHONY: runtime_daemon
+runtime_daemon: $(ARTICo3D_OBJS)
+	$(CC) $(LDFLAGS_ARTICo3D) $^ $(LDLIBS_ARTICo3D) -o libartico3d.so
+	$(AR) rcs libartico3d.a $^
+
+.PHONY: clean
+clean:
+	rm -rf _build libartico3.so libartico3.a libartico3d.so libartico3d.a daemon machsuite
+
+_build/runtime/daemon/%.o: runtime/daemon/%.c
+	$(MKDIRP) $(@D)
+	$(CC) $(CFLAGS_ARTICo3D) -c $< -o $@
+
+_build/runtime/user/%.o: runtime/user/%.c
+	$(MKDIRP) $(@D)
+	$(CC) $(CFLAGS_ARTICo3) -c $< -o $@
+
+_build/application/%.o: application/%.c
+	$(MKDIRP) $(@D)
+	$(CC) $(CFLAGS_APP) -x c -c $< -o $@
+
+_build/application/%.o: application/%.cpp
+	$(MKDIRP) $(@D)
+	$(CC) $(CFLAGS_APP) -x c -c $< -o $@

@@ -1889,3 +1889,50 @@ void strided_execution(kernel_data *kernel, queue_online *online_queue, pthread_
 
 	#endif
 }
+
+
+
+/**
+ * @brief MDC AES kernel configuration and execution in the FPGA via MDC
+ *
+ * @param kernel kernel information
+ * @param online_queue Array of online queues
+ * @param online_queue_lock Array of online queues mutexes
+ * @param aes_vargs Pointer to the kernel inputs and outputs buffers (retrocompatibility)
+ */
+void mdc_aes_execution(kernel_data *kernel, queue_online *online_queue, pthread_mutex_t *online_queue_lock, void *aes_vargs) {
+
+	print_info("MDC Execution AES... %d times\n", kernel->num_executions);
+
+	/* Execution */
+
+	#if MDC
+
+	int i;
+
+	// Internal variable
+	// int cu = kernel->cu;
+	// int slot_id = kernel->slot_id;
+	int executions = kernel->num_executions;
+	struct timespec *start = &(kernel->measured_arrival_time);
+	struct timespec *finish = &(kernel->measured_finish_time);
+
+	#if MONITOR
+	// Insert kernel in online queue
+	_kernel_to_online_queue(online_queue, online_queue_lock, kernel);
+	#endif
+
+	// Measure start time
+	clock_gettime(CLOCK_MONOTONIC, start);
+
+	// MDC AES execution
+	for (i = 0; i < executions; i++) {
+		mdc_aes();
+	}
+
+	// Measure finish time
+	clock_gettime(CLOCK_MONOTONIC, finish);
+	print_info("Finished MDC Execution AES... %d times\n", kernel->num_executions);
+
+	#endif
+}

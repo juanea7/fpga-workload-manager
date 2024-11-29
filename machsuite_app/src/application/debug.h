@@ -19,11 +19,12 @@
 #endif
 
 #ifndef INFO
-    #define INFO 0
+    #define INFO 1
 #endif
 
 #ifndef ARTICO
-    #define ARTICO 1
+    #define ARTICO 0
+    #define MDC    1
 #endif
 
 #ifndef MONITOR
@@ -35,11 +36,11 @@
 #endif
 
 #ifndef ONLINE_MODELS
-    #define ONLINE_MODELS 1
+    #define ONLINE_MODELS 0
 #endif
 
 #ifndef EXECUTION_MODES
-    #define EXECUTION_MODES 1
+    #define EXECUTION_MODES 0
 #endif
 
 #ifndef CPU_USAGE
@@ -47,23 +48,24 @@
 #endif
 
 #ifndef TRACES_RAM
-    #define TRACES_RAM 1
+    #define TRACES_RAM 0
 #endif
 
 #ifndef TRACES_ROM
-    #define TRACES_ROM 0
+    #define TRACES_ROM 1
 #endif
 
 #ifndef TRACES_SOCKET
-    #define TRACES_SOCKET 1
+    #define TRACES_SOCKET 0
 #endif
 
 // Set the board type
 // TODO: This could be done using the macros defined by the toolchain in the compilation (much more elegant)
 #define PYNQ 1
 #define ZCU  2
+#define KRIA 3
 #ifndef BOARD
-    #define BOARD ZCU
+    #define BOARD KRIA
 #endif
 
 // Debug messages

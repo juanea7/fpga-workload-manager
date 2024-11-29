@@ -35,7 +35,11 @@
 #endif
 
 #if MONITOR
-	#include "monitor.h"
+	#if MDC
+		#include "mdc/unified_monitor/unified_monitor.h"
+	#else
+		#include "monitor.h"
+	#endif
 
 	#if BOARD == ZCU
 		#define MONITOR_POWER_SAMPLES  (131072)
@@ -43,7 +47,10 @@
 	#elif BOARD == PYNQ
 		#define MONITOR_POWER_SAMPLES  (65536)
 		#define MONITOR_TRACES_SAMPLES (16384)
-#endif
+	#elif BOARD == KRIA
+		#define MONITOR_POWER_SAMPLES  (0)
+		#define MONITOR_TRACES_SAMPLES (64)
+	#endif
 
 	#if TRACES_RAM
 		#include "ping_pong_buffers.h"
@@ -61,10 +68,15 @@ const char * __shm_directory(size_t * len)
 	return SHMDIR;
 }
 #endif
+
+#if MDC
+	#include "mdc/mdc_support.h"
+#endif
+
 /************************ Application Constants ******************************/
 
 // Number of kernels to be executed
-#define NUM_KERNELS 20000
+#define NUM_KERNELS 5000
 // Monitoring period in ms
 #define MONITORING_PERIOD_MS 500
 // Number of monitoring windows (-1 if forever)
@@ -82,6 +94,8 @@ const char * __shm_directory(size_t * len)
 	#define NUM_SLOTS 8
 #elif BOARD == PYNQ
 	#define NUM_SLOTS 4
+#elif BOARD == KRIA
+	#define NUM_SLOTS 1
 #endif
 
 /*****************************************************************************/
@@ -89,6 +103,7 @@ const char * __shm_directory(size_t * len)
 
 /************************** Global Setup Variables ***************************/
 execution_funct_type kernel_execution_functions[TYPES_OF_KERNELS] = {
+	#if MDC == 0
 	aes_execution,
 	bulk_execution,
 	crs_execution,
@@ -99,7 +114,11 @@ execution_funct_type kernel_execution_functions[TYPES_OF_KERNELS] = {
 	queue_execution,
 	stencil2d_execution,
 	stencil3d_execution,
-	strided_execution};
+	strided_execution
+	#else
+	mdc_aes_execution
+	#endif
+};
 
 // For avoiding duplicated kernel executions in ARTICo3
 pthread_mutex_t duplicated_kernel_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -1068,8 +1087,11 @@ void* monitoring_thread(void *arg) {
 
 	// Allocate data buffers for Monitor
 	print_debug("[MONITOR] Monitor buffers allocation...\n");
+
+	#if MDC == 0
     monitorpdata_t *power  = monitor_alloc(MONITOR_POWER_SAMPLES, "power", MONITOR_REG_POWER);
     monitortdata_t *traces = monitor_alloc(MONITOR_TRACES_SAMPLES, "traces", MONITOR_REG_TRACES);
+	#endif
 
 	// Create shared memories backed on ram (ram mode)
 	#if TRACES_RAM
@@ -1124,36 +1146,55 @@ void* monitoring_thread(void *arg) {
 		#endif
 
 		// Start monitor
-		monitor_start();
+		#if MDC
+			unified_monitor_start();
+		#else
+			monitor_start();
+		#endif
 
-		// Wait for the monitor interrupt
-		monitor_wait();
+		#if MDC
+			// Wait 30ms
+			usleep(30000);
+			unified_monitor_stop();
+		#else
+			// Wait for the monitor interrupt
+			monitor_wait();
+		#endif
 
 		// Log end of the monitorization
 		clock_gettime(CLOCK_MONOTONIC, &aux_timer);
 		monitor_window.measured_finish_time = aux_timer;
 
-		// Read number of power consupmtion and traces measurements stored in the BRAMS
-		unsigned int number_power_samples = monitor_get_number_power_measurements();
-		unsigned int number_traces_samples = monitor_get_number_traces_measurements();
-		// Check errors
-		// TODO: If the errors surpass a threadhold, invalidate the measurement and reconfigure ADC
-		unsigned int number_power_errors = monitor_get_power_errors();
+		#if MDC
+			int * power;
+			monitortdata_t * traces;
+			int number_power_samples;
+			int number_traces_samples;
+			int elapsed_time;
+			unified_monitor_read(&power, &traces, &number_power_samples, &number_traces_samples, &elapsed_time);
+		#else
+			// Read number of power consupmtion and traces measurements stored in the BRAMS
+			unsigned int number_power_samples = monitor_get_number_power_measurements();
+			unsigned int number_traces_samples = monitor_get_number_traces_measurements();
+			// Check errors
+			// TODO: If the errors surpass a threadhold, invalidate the measurement and reconfigure ADC
+			unsigned int number_power_errors = monitor_get_power_errors();
 
-		// Read monitor buffers
-		if(monitor_read_power_consumption(number_power_samples + number_power_samples%4) != 0) {
-			print_error("[MONITOR] Error reading power\n\r");
-			exit(1);
-			goto monitor_err;
-		}
-		if(monitor_read_traces(number_traces_samples + number_traces_samples%4) != 0) {
-			print_error("[MONITOR] Error reading traces\n\r");
-			exit(1);
-			goto monitor_err;
-		}
+			// Read monitor buffers
+			if(monitor_read_power_consumption(number_power_samples + number_power_samples%4) != 0) {
+				print_error("[MONITOR] Error reading power\n\r");
+				exit(1);
+				goto monitor_err;
+			}
+			if(monitor_read_traces(number_traces_samples + number_traces_samples%4) != 0) {
+				print_error("[MONITOR] Error reading traces\n\r");
+				exit(1);
+				goto monitor_err;
+			}
 
-		// Read monitor elapsed time
-		unsigned int elapsed_time = monitor_get_time();
+			// Read monitor elapsed time
+			unsigned int elapsed_time = monitor_get_time();
+		#endif
 
 		// DEBUG
 		clock_gettime(CLOCK_MONOTONIC, &start_online);
@@ -1228,15 +1269,19 @@ void* monitoring_thread(void *arg) {
 		monitor_err:
 
 		// Clean monitor brams and counters
-		monitor_clean();
+		#if MDC == 0
+			monitor_clean();
+		#endif
 
 		// Check errors
 		// TODO: If the errors surpass a threadhold, invalidate the measurement and reconfigure ADC
-		if(number_power_errors >= number_power_samples){
-			print_error("There have been %u power errors when trying to read %u samples\n", number_power_errors, number_power_samples);
-			// Reconfigure ADC just in case
-			monitor_config_2vref();
-		}
+		#if MDC == 0
+			if(number_power_errors >= number_power_samples){
+				print_error("There have been %u power errors when trying to read %u samples\n", number_power_errors, number_power_samples);
+				// Reconfigure ADC just in case
+				monitor_config_2vref();
+			}
+		#endif
 
 		// Enqueue monitor data
 		enqueue_monitor(&monitor_info_queue, &monitor_window);
@@ -1393,8 +1438,10 @@ void* monitoring_thread(void *arg) {
 	#endif
 
 	// Free monitor data buffers
-	monitor_free("power");
-	monitor_free("traces");
+	#if MDC == 0
+		monitor_free("power");
+		monitor_free("traces");
+	#endif
 
 	#if TRACES_ROM
 		// Write monitor info
@@ -1515,7 +1562,7 @@ int main(int argc, char* argv[]) {
 	monitoring_mode = MEASURE;
 	printf("[Monitor] -> [MEASURE]\n");
 	/*************************** Print Setup Parameters **********************************/
-	char str1[]  = "Board (PYNQ:1|ZCU:2)";
+	char str1[]  = "Board (PYNQ:1|ZCU:2|KRIA:3)";
 	char str2[]  = "Monitorization (1/0)";
 	char str3[]  = "Online Modeling (1/0)";
 	char str4[]  = "Execution Modes (1/0)";
@@ -1612,13 +1659,21 @@ int main(int argc, char* argv[]) {
 	srand(42);
 
 	// Initialize ARTICo3
-	artico_setup();
+	#if ARTICO
+		artico_setup();
+	#elif MDC
+		mdc_setup();
+	#endif
 
 	// Initialize Monitor (set Vret to Vref)
-	#if BOARD == ZCU
-		monitor_setup(0);
-	#elif BOARD == PYNQ
-		monitor_setup(1);
+	#if MDC
+		unified_monitor_init();
+	#else
+		#if BOARD == ZCU
+			monitor_setup(0);
+		#elif BOARD == PYNQ
+			monitor_setup(1);
+		#endif
 	#endif
 
 	#if MONITOR
@@ -1721,8 +1776,11 @@ int main(int argc, char* argv[]) {
 			// Info from binary files
 			aux_kernel_data.initial_time = initial_time;
 			aux_kernel_data.temp_id = i;
-			//aux_kernel_data.kernel_label = 3; // Always use crs kernel
-			aux_kernel_data.kernel_label = kernel_label_buffer[i];
+			#if MDC
+				aux_kernel_data.kernel_label = 0; // Always use aes kernel
+			#else
+				aux_kernel_data.kernel_label = kernel_label_buffer[i];
+			#endif
 			aux_kernel_data.num_executions = num_executions_buffer[i];
 			aux_kernel_data.intended_arrival_time_ms = (long int)(inter_arrival_buffer[i]);
 			aux_kernel_data.slot_id = 0;
@@ -1746,6 +1804,9 @@ int main(int argc, char* argv[]) {
 			#elif BOARD == PYNQ
 			int tmp_cu[3] = {1,2,4}; 			// PYNQ
 			int rand_value = ((int)(rand()%3)); // PYNQ
+			#elif BOARD == KRIA
+			int tmp_cu[1] = {1}; 			    // KRIA
+			int rand_value = 1;                 // KRIA
 			#endif
 			// aux_kernel_data.cu = 1;  // FIFO 8 acc/tarea no interaccion
 			// aux_kernel_data.cu = 1;  // FIFO 1 acc/tarea multiples tareas en paralelo
@@ -1879,10 +1940,18 @@ int main(int argc, char* argv[]) {
 	#endif
 
 	// Clean Monitor
-	monitor_cleanup();
+	#if MDC
+		unified_monitor_clean();
+	#else
+		monitor_cleanup();
+	#endif
 
 	// Clean ARTICo3
-	artico_cleanup();
+	#if ARTICO
+		artico_cleanup();
+	#elif MDC
+		mdc_cleanup();
+	#endif
 
 	// Destroy the thread pool
 	print_debug("Destroy pool\n");

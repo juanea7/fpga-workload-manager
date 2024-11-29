@@ -21,7 +21,9 @@
 	#include "artico3.h"
 #endif
 #if MONITOR
-	#include "monitor.h"
+	#if MDC == 0
+		#include "monitor.h"
+	#endif
 #endif
 
 
@@ -464,7 +466,7 @@ void monitor_setup(const int doble_reference_voltage) {
 
 	print_debug("\nMonitor Setup...\n");
 
-	#if MONITOR
+	#if MONITOR && MDC == 0
 
     // Load Monitor overlay and driver
 	system("./setup_monitor/setup_monitor.sh");
@@ -493,7 +495,7 @@ void monitor_cleanup(void) {
 
 	print_debug("\nCleaning Monitor...\n");
 
-	#if MONITOR
+	#if MONITOR && MDC == 0
 
 	// Clean monitor hw
 	monitor_stop();

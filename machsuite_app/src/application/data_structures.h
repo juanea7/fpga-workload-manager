@@ -11,18 +11,24 @@
 
 #include <time.h>
 
+#include "debug.h"
+
 // On ram file sizes (empirical)
 #define POWER_FILE_SIZE 525*1024
 #define TRACES_FILE_SIZE 20*1024
 #define ONLINE_FILE_SIZE 2*1024
 
 // Number of different kernel functions
-#define TYPES_OF_KERNELS 11
-
+#if MDC == 0
+	#define TYPES_OF_KERNELS 11
+#else
+	#define TYPES_OF_KERNELS 1
+#endif
 
 /************** Data structures *******************/
 
 // Kernel labels
+#if MDC == 0
 typedef enum {
 	AES,
 	BULK,
@@ -36,6 +42,11 @@ typedef enum {
 	STENCIL3D,
 	STRIDED
 }kernel_label_t;
+#else
+typedef enum {
+	AES
+}kernel_label_t;
+#endif
 
 /**
  * @brief Kernel related information
