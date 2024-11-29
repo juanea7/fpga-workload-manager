@@ -53,13 +53,14 @@
 
 // Needed when compiling -lrt statically linked
 // TODO: uncomment, its been done for testing with artico3 daemon
-// #define SHMDIR "/dev/shm/"
-// const char * __shm_directory(size_t * len)
-// {
-// 	*len = sizeof(SHMDIR) - 1;
-// 	return SHMDIR;
-// }
-
+#if ARTICO == 0
+#define SHMDIR "/dev/shm/"
+const char * __shm_directory(size_t * len)
+{
+	*len = sizeof(SHMDIR) - 1;
+	return SHMDIR;
+}
+#endif
 /************************ Application Constants ******************************/
 
 // Number of kernels to be executed

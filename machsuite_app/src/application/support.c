@@ -412,7 +412,7 @@ void artico_setup(void) {
 
 	// Needed to configure the main .bit which contains monitor HW
 	// ARTICo3 Init
-	artico3_init();
+	// artico3_init();
 
 	#endif
 
@@ -448,7 +448,7 @@ void artico_cleanup(void) {
 
 	// Needed to remove the HW
 	// ARTICo3 exit
-	artico3_exit();
+	// artico3_exit();
 
 	#endif
 }
