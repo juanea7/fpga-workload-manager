@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     # Socket variables
     my_hostname=socket.gethostname()
-    socket_ip_address=socket.gethostbyname(my_hostname)
+    socket_ip_address="192.168.100.1"
     socket_port = 4242
 
     print("[Socket Info] {}:{}".format(socket_ip_address, socket_port))
