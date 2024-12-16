@@ -36,11 +36,11 @@
 #endif
 
 #ifndef ONLINE_MODELS
-    #define ONLINE_MODELS 0
+    #define ONLINE_MODELS 1
 #endif
 
 #ifndef EXECUTION_MODES
-    #define EXECUTION_MODES 0
+    #define EXECUTION_MODES 1
 #endif
 
 #ifndef CPU_USAGE
@@ -48,15 +48,15 @@
 #endif
 
 #ifndef TRACES_RAM
-    #define TRACES_RAM 0
+    #define TRACES_RAM 1
 #endif
 
 #ifndef TRACES_ROM
-    #define TRACES_ROM 1
+    #define TRACES_ROM 0
 #endif
 
 #ifndef TRACES_SOCKET
-    #define TRACES_SOCKET 0
+    #define TRACES_SOCKET 1
 #endif
 
 // Set the board type

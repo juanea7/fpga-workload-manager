@@ -21,7 +21,7 @@
 
 
 /* UPM monitor */
-#define TRACES_SAMPLES (64)
+#define TRACES_SAMPLES (16384)
 
 // [UPM] variables
 monitortdata_t *traces;
@@ -66,13 +66,19 @@ int unified_monitor_init() {
  */
 int unified_monitor_start() {
 
+    struct timespec time1;
+    clock_gettime(CLOCK_MONOTONIC, &time1);
+    printf("UNICA Monitor (pre) started at %ld:%ld\n", time1.tv_sec, time1.tv_nsec);
 	// [UNICA] monitor start
 	time_before = start_monitor();
-    // [UPM] Send start command to MONITOR
+    struct timespec time2;
+    clock_gettime(CLOCK_MONOTONIC, &time2);
+    printf("UNICA Monitor (post) started at %ld:%ld\n", time2.tv_sec, time2.tv_nsec);
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
+    printf("UPM Monitor started at %ld:%ld\n", time.tv_sec, time.tv_nsec);
+    // [UPM] Send start command to MONITOR
     monitor_start();
-    printf("Monitor started at %ld:%ld\n", time.tv_sec, time.tv_nsec);
     return 0;
 }
 
@@ -85,14 +91,18 @@ int unified_monitor_start() {
 int unified_monitor_stop() {
 
     // [UPM] Wait for the interruption that signals the end of the monitor execution
+    monitor_stop();
+    struct timespec time2;
+    clock_gettime(CLOCK_MONOTONIC, &time2);
+    printf("UPM Monitor stopped at %ld:%ld\n", time2.tv_sec, time2.tv_nsec);
+	// [UNICA] stop monitor
     struct timespec time;
     clock_gettime(CLOCK_MONOTONIC, &time);
-    monitor_stop();
-    printf("Monitor stopped at %ld:%ld\n", time.tv_sec, time.tv_nsec);
-	// [UNICA] stop monitor
+    printf("UNICA Monitor (pre) stopped at %ld:%ld\n", time.tv_sec, time.tv_nsec);
 	time_after = stop_monitor();
-
-	printf("\nTime elapsed: %f ms\n", ((double)time_after - (double)time_before)/1000000);
+    struct timespec time1;
+    clock_gettime(CLOCK_MONOTONIC, &time1);
+    printf("UNICA Monitor (post) stopped at %ld:%ld\n", time1.tv_sec, time1.tv_nsec);
 
     return 0;
 }

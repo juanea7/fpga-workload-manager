@@ -49,7 +49,8 @@
 		#define MONITOR_TRACES_SAMPLES (16384)
 	#elif BOARD == KRIA
 		#define MONITOR_POWER_SAMPLES  (0)
-		#define MONITOR_TRACES_SAMPLES (64)
+		// #define MONITOR_TRACES_SAMPLES (64)
+		#define MONITOR_TRACES_SAMPLES (16384)
 	#endif
 
 	#if TRACES_RAM
@@ -76,7 +77,7 @@ const char * __shm_directory(size_t * len)
 /************************ Application Constants ******************************/
 
 // Number of kernels to be executed
-#define NUM_KERNELS 5000
+#define NUM_KERNELS 15000
 // Monitoring period in ms
 #define MONITORING_PERIOD_MS 500
 // Number of monitoring windows (-1 if forever)
@@ -1059,7 +1060,8 @@ void* monitoring_thread(void *arg) {
 		printf("power and traces cloud ptrs ok init\n");
 
 		// Create the UDP socket to send data to cloud
-		cloud_socket_id = create_socket_tcp_inet(&cloud_socket_addr, "138.100.74.53", 4242);
+		// cloud_socket_id = create_socket_tcp_inet(&cloud_socket_addr, "138.100.74.53", 4242);
+		cloud_socket_id = create_socket_tcp_inet(&cloud_socket_addr, "192.168.100.1", 4242);
 		if(cloud_socket_id < 0) {
 			print_error("Error TCP inet socket creation\n");
 			exit(1);
@@ -1129,10 +1131,6 @@ void* monitoring_thread(void *arg) {
 		// Wait for an event
 	    clock_nanosleep(CLOCK_MONOTONIC,TIMER_ABSTIME,&(schedule_timer), NULL);
 
-		// Log start of the monitorization
-		monitor_window.initial_time = monitor_args.initial_time;
-		clock_gettime(CLOCK_MONOTONIC, &aux_timer);
-		monitor_window.measured_starting_time =aux_timer;
 
 		// CPU usage | TODO:(falta un mutex y tal)
 		#if CPU_USAGE
@@ -1148,22 +1146,34 @@ void* monitoring_thread(void *arg) {
 		// Start monitor
 		#if MDC
 			unified_monitor_start();
+			// Log start of the monitorization (here because UNICA monitor need some time-consuming operations that we don't want to include in the monitorization window)
+			monitor_window.initial_time = monitor_args.initial_time;
+			clock_gettime(CLOCK_MONOTONIC, &aux_timer);
+			monitor_window.measured_starting_time =aux_timer;
 		#else
+			// Log start of the monitorization
+			monitor_window.initial_time = monitor_args.initial_time;
+			clock_gettime(CLOCK_MONOTONIC, &aux_timer);
+			monitor_window.measured_starting_time =aux_timer;
 			monitor_start();
 		#endif
 
 		#if MDC
-			// Wait 30ms
-			usleep(30000);
+			// Wait 15ms
+			usleep(15000);
+			// Log end of the monitorization (here because UNICA monitor need some time-consuming operations that we don't want to include in the monitorization window)
+			clock_gettime(CLOCK_MONOTONIC, &aux_timer);
+			monitor_window.measured_finish_time = aux_timer;
 			unified_monitor_stop();
 		#else
 			// Wait for the monitor interrupt
 			monitor_wait();
+			// Log end of the monitorization
+			clock_gettime(CLOCK_MONOTONIC, &aux_timer);
+			monitor_window.measured_finish_time = aux_timer;
 		#endif
 
-		// Log end of the monitorization
-		clock_gettime(CLOCK_MONOTONIC, &aux_timer);
-		monitor_window.measured_finish_time = aux_timer;
+		printf("[MONITOR] Monitorization #%d -> Start: %ld:%09ld | Finish: %ld:%09ld\n", monitorization_count, monitor_window.measured_starting_time.tv_sec, monitor_window.measured_starting_time.tv_nsec, monitor_window.measured_finish_time.tv_sec, monitor_window.measured_finish_time.tv_nsec);
 
 		#if MDC
 			int * power;
@@ -1806,7 +1816,7 @@ int main(int argc, char* argv[]) {
 			int rand_value = ((int)(rand()%3)); // PYNQ
 			#elif BOARD == KRIA
 			int tmp_cu[1] = {1}; 			    // KRIA
-			int rand_value = 1;                 // KRIA
+			int rand_value = 0;                 // KRIA
 			#endif
 			// aux_kernel_data.cu = 1;  // FIFO 8 acc/tarea no interaccion
 			// aux_kernel_data.cu = 1;  // FIFO 1 acc/tarea multiples tareas en paralelo

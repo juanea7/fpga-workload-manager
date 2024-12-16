@@ -14,9 +14,15 @@
 #include "debug.h"
 
 // On ram file sizes (empirical)
-#define POWER_FILE_SIZE 525*1024
-#define TRACES_FILE_SIZE 20*1024
-#define ONLINE_FILE_SIZE 2*1024
+#if MDC == 1
+	#define POWER_FILE_SIZE 525*1024
+	#define TRACES_FILE_SIZE 50*1024
+	#define ONLINE_FILE_SIZE 2*1024
+#else
+	#define POWER_FILE_SIZE 525*1024
+	#define TRACES_FILE_SIZE 20*1024
+	#define ONLINE_FILE_SIZE 2*1024
+#endif
 
 // Number of different kernel functions
 #if MDC == 0
