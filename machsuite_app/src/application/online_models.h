@@ -17,7 +17,21 @@
 #include "debug.h"
 
 
-typedef struct online_models_features_t{
+typedef struct online_models_schedule_decision_t{
+    uint8_t aes;
+    uint8_t bulk;
+    uint8_t crs;
+    uint8_t kmp;
+    uint8_t knn;
+    uint8_t merge;
+    uint8_t nw;
+    uint8_t queue;
+    uint8_t stencil2d;
+    uint8_t stencil3d;
+    uint8_t strided;
+}online_models_schedule_decision_t;
+
+typedef struct online_models_features_t{  // Used as scheduling request when main set to 0xFF
     float user;
     float kernel;
     float idle;
@@ -101,7 +115,6 @@ int online_models_setup(online_models_t *om, const unsigned int num_measurements
  */
 int online_models_clean(const online_models_t *om);
 
-
 /**
  * @brief Commands a training/test process (is the python's decision) to the online models on the
  * 		  external python code via the TCP training socket
@@ -112,6 +125,34 @@ int online_models_clean(const online_models_t *om);
  * @return (int) 0 on success, error code otherwise
  */
 int online_models_operation(const online_models_t *om, const unsigned int num_measurements, int *obs_to_wait);
+
+/**
+ * @brief Asks for a CSA training process to the online models on the external python code via the
+ *        TCP training socket
+ *
+ * @param om Pointer to the online models structure
+ * @param schedule_request Pointer to the schedule request to be sent to the python code
+ * @return (online_models_schedule_decision_t) Scheduling decision made by the online models
+ */
+online_models_schedule_decision_t online_models_schedule(const online_models_t *om, const online_models_features_t *schedule_request);
+
+/**
+ * @brief Adds a kernel label to the scheduling request
+ *
+ * @param schedule_request Pointer to the scheduling request
+ * @param kernel_label Kernel label to be added
+ * @return (int) 0 on success, error code otherwise
+ */
+int add_kernel_label_to_scheduling_request(online_models_features_t *schedule_request, const int kernel_label);
+
+/**
+ * @brief Gets the CUs of a kernel from the scheduling decision
+ *
+ * @param schedule_decision Pointer to the scheduling decision
+ * @param kernel_label Kernel label to get the CUs from
+ * @return (int) CUs of the kernel
+ */
+int get_kernel_from_scheduling_decision(online_models_schedule_decision_t *schedule_decision, const int kernel_label);
 
 /**
  * @brief Commands a training process to the online models on the external

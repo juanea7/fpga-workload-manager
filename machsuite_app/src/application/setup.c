@@ -572,6 +572,9 @@ void* queue_manager_thread(void *arg) {
 	int free_slots_tmp = 0;
 	int duplicated_kernels_tmp[TYPES_OF_KERNELS];
 
+	// Scheduling variables (used to reset pending kernels when the scheduling has changed)
+	int reset_prior_schedule_decision_flag = 0;
+
 	// TODO: Test num_workloads
 	int num_workloads = *((int *) arg);
 	int workload_index;
@@ -688,22 +691,26 @@ void* queue_manager_thread(void *arg) {
 					#endif
 
 					#if ONLINE_MODELS
-						if (schedule_lif_from_n_executable_kernels(
+						if (schedule_CSA_from_n_executable_kernels(
 							&kernel_execution_queue,
-							free_slots_tmp,
 							duplicated_kernels_tmp,
 							&kernel_tmp,
 							&online_models,
-							2,
+							3,
 							user_cpu,
 							kernel_cpu,
-							idle_cpu) < 0) // TODO: conseguir un mapa tras entrenar (no tenemos info de si está entrenado el sistema)
+							idle_cpu,
+							reset_prior_schedule_decision_flag) < 0) // TODO: conseguir un mapa tras entrenar (no tenemos info de si está entrenado el sistema)
 							end_of_queue_flag = 1;
+						// Scheduling is used, so this flag is set to 0
+						reset_prior_schedule_decision_flag = 0;
 					#endif
 				}
 				else {
 					if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
 						end_of_queue_flag = 1;
+					// Scheduling has changed, so we have to reset the scheduling decision
+					reset_prior_schedule_decision_flag = 1;
 				}
 			#else
 				if(dequeue_first_executable_kernel(&kernel_execution_queue, free_slots_tmp, duplicated_kernels_tmp, &kernel_tmp) < 0)
@@ -1723,7 +1730,7 @@ int main(int argc, char* argv[]) {
 			aux_kernel_data.temp_id = i;
 			//aux_kernel_data.kernel_label = 3; // Always use crs kernel
 			aux_kernel_data.kernel_label = kernel_label_buffer[i];
-			aux_kernel_data.num_executions = num_executions_buffer[i];
+			aux_kernel_data.num_executions = 2*num_executions_buffer[i];
 			aux_kernel_data.intended_arrival_time_ms = (long int)(inter_arrival_buffer[i]);
 			aux_kernel_data.slot_id = 0;
 

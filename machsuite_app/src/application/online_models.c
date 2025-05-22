@@ -13,6 +13,7 @@
 #include "online_models.h"
 
 #include "debug.h"
+#include "data_structures.h"
 #include "client_socket_udp.h"
 #include "client_socket_tcp.h"
 
@@ -47,6 +48,7 @@ static void _online_models_print_metrics(const online_models_metrics_t *omm){
 		printf("Metrics {Power: %.6f, Time: %.6f}\n", omm->power_error, omm->time_error);
 	#endif
 }
+
 /**
  * @brief Prints the features of a particular observation
  *
@@ -89,6 +91,26 @@ void online_models_print_prediction(const online_models_prediction_t *omp) {
 	printf("}\n\n");
 }
 
+/**
+ * @brief Prints the scheduling decision
+ *
+ * @param omsd Scheduling decision structure
+ */
+void online_models_print_decision(const online_models_schedule_decision_t *omsd) {
+	printf("Scheduling Decision{\n");
+	printf("AES:       %d\n", omsd->aes);
+	printf("BULK:      %d\n", omsd->bulk);
+	printf("CRS:       %d\n", omsd->crs);
+	printf("KMP:       %d\n", omsd->kmp);
+	printf("KNN:       %d\n", omsd->knn);
+	printf("MERGE:     %d\n", omsd->merge);
+	printf("NW:        %d\n", omsd->nw);
+	printf("QUEUE:     %d\n", omsd->queue);
+	printf("STENCIL2D: %d\n", omsd->stencil2d);
+	printf("STENCIL3D: %d\n", omsd->stencil3d);
+	printf("STRIDED:   %d\n", omsd->strided);
+	printf("}\n\n");
+}
 /**
  * @brief Creates the UDP and TCP client Unix-domain sockets for training
  *        and predicting with the online models implemented in the external
@@ -165,15 +187,6 @@ int online_models_clean(const online_models_t *om) {
     close_socket_tcp(om->training_socket_fd);
 	print_debug("The TCP training socket has been successfully close\n");
 
-	// test
-	{
-	online_models_features_t features_test = {58.08,33.33,8.59,7,2,0,0,1,0,1,0,1,4,0,0};
-	online_models_prediction_t prediction_test;
-	prediction_test = online_models_predict(om, &features_test);
-	online_models_print_features(&features_test);
-	online_models_print_prediction(&prediction_test);
-	}
-
     // Clean prediction TCP socket
     ret = send_data_to_socket_tcp(om->prediction_socket_fd, END_PREDICTING_SIGNAL, COMMAND_SIZE);
 	if(ret < 0) {
@@ -218,6 +231,151 @@ int online_models_operation(const online_models_t *om, const unsigned int num_me
 	print_debug("The TCP training socket has successfully notified python to train/test\n");
 
     return 0;
+}
+
+
+/**
+ * @brief Adds a kernel label to the scheduling request
+ *
+ * @param schedule_request Pointer to the scheduling request
+ * @param kernel_label Kernel label to be added
+ * @return (int) 0 on success, error code otherwise
+ */
+int add_kernel_label_to_scheduling_request(online_models_features_t *schedule_request, const int kernel_label) {
+
+        switch (kernel_label)
+        {
+        case AES:
+            schedule_request->aes = 0xFF;
+            break;
+        case BULK:
+            schedule_request->bulk = 0xFF;
+            break;
+        case CRS:
+            schedule_request->crs = 0xFF;
+            break;
+        case KMP:
+            schedule_request->kmp = 0xFF;
+            break;
+        case KNN:
+            schedule_request->knn = 0xFF;
+            break;
+        case MERGE:
+            schedule_request->merge = 0xFF;
+            break;
+        case NW:
+            schedule_request->nw = 0xFF;
+            break;
+        case QUEUE:
+            schedule_request->queue = 0xFF;
+            break;
+        case STENCIL2D:
+            schedule_request->stencil2d = 0xFF;
+            break;
+        case STENCIL3D:
+            schedule_request->stencil3d = 0xFF;
+            break;
+        case STRIDED:
+            schedule_request->strided = 0xFF;
+            break;
+        default:
+            break;
+        }
+
+		return 0;
+}
+
+
+/**
+ * @brief Gets the CUs of a kernel from the scheduling decision
+ *
+ * @param schedule_decision Pointer to the scheduling decision
+ * @param kernel_label Kernel label to get the CUs from
+ * @return (int) CUs of the kernel
+ */
+int get_kernel_from_scheduling_decision(online_models_schedule_decision_t *schedule_decision, const int kernel_label) {
+
+		int kernel_cu = 0;
+
+        switch (kernel_label)
+        {
+        case AES:
+            kernel_cu = schedule_decision->aes;
+            break;
+        case BULK:
+            kernel_cu = schedule_decision->bulk;
+            break;
+        case CRS:
+            kernel_cu = schedule_decision->crs;
+            break;
+        case KMP:
+            kernel_cu = schedule_decision->kmp;
+            break;
+        case KNN:
+            kernel_cu = schedule_decision->knn;
+            break;
+        case MERGE:
+            kernel_cu = schedule_decision->merge;
+            break;
+        case NW:
+            kernel_cu = schedule_decision->nw;
+            break;
+        case QUEUE:
+            kernel_cu = schedule_decision->queue;
+            break;
+        case STENCIL2D:
+            kernel_cu = schedule_decision->stencil2d;
+            break;
+        case STENCIL3D:
+            kernel_cu = schedule_decision->stencil3d;
+            break;
+        case STRIDED:
+            kernel_cu = schedule_decision->strided;
+            break;
+        default:
+            break;
+        }
+
+		return kernel_cu;
+}
+
+
+/**
+ * @brief Asks for a CSA training process to the online models on the external python code via the
+ *        TCP training socket
+ *
+ * @param om Pointer to the online models structure
+ * @param schedule_request Pointer to the schedule request to be sent to the python code
+ * @return (online_models_schedule_decision_t) Scheduling decision made by the online models
+ */
+online_models_schedule_decision_t online_models_schedule(const online_models_t *om, const online_models_features_t *schedule_request) {
+
+    int ret;
+
+	online_models_schedule_decision_t decision;
+
+	// printf("[Models Operation] scheduling decision\n");
+	// online_models_print_features(schedule_request);
+
+    // The python code can tell if it is a scheduling request by checking whether Main == 0xFF
+    ret = send_data_to_socket_tcp(om->prediction_socket_fd, schedule_request, sizeof(*schedule_request));
+	if(ret < 0) {
+		print_error("Error TCP prediction socket request schedule\n");
+		exit(1);
+	}
+
+    ret = recv_data_from_socket_tcp(om->prediction_socket_fd, &decision, sizeof(decision));
+	if(ret < 0) {
+		print_error("Error TCP prediction socket receive decision\n");
+		exit(1);
+	}
+
+	// DEBUG
+	// printf("[Models Operation] scheduling decision\n");
+	// online_models_print_decision(&decision);
+	print_debug("The TCP training socket has successfully notified python to schedule\n");
+
+    return decision;
 }
 
 

@@ -31,7 +31,7 @@
 #endif
 
 #ifndef SCHEDULER
-    #define SCHEDULER 0
+    #define SCHEDULER 1
 #endif
 
 #ifndef ONLINE_MODELS
@@ -55,7 +55,7 @@
 #endif
 
 #ifndef TRACES_SOCKET
-    #define TRACES_SOCKET 1
+    #define TRACES_SOCKET 0
 #endif
 
 // Set the board type

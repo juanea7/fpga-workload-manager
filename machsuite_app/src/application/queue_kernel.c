@@ -304,6 +304,225 @@ int dequeue_first_executable_kernel(queue *q, const int free_slots, const int *d
 }
 
 /**
+ * @brief Schedule using a Crow Search Algorithm (CSA) to select kernel configuration from the queue
+ *
+ * @param q Pointer to the queue to dequeue the node from
+ * @param duplicated_kernels Array indicating wich kernels are duplicated
+ * @param d Pointer where the function will store the dequeued node
+ * @param om Pointer to the online models structure
+ * @param num_kernels_to_check Number of kernels to check
+ * @param user_cpu User CPU usage
+ * @param kernel_cpu Kernel CPU usage
+ * @param idle_cpu Idle CPU usage
+ * @param predicted_time_alone_map Map with the predicted time alone for each kernel
+ * @return (int) 0 on success, error code otherwise
+ */
+int schedule_CSA_from_n_executable_kernels(queue *q, const int *duplicated_kernels, kernel_data *d, const online_models_t *om, const int num_kernels_to_check, const float user_cpu, const float kernel_cpu, const float idle_cpu, const int reset_prior_decisions) {
+
+    // printf("[SCHED] Scheduling decision using CSA\n");
+
+    // Check if the queue is empty
+    if(q->head == NULL) return -1;
+
+    // Save the first node
+    node *prev = NULL;
+    node *tmp = q->head;
+
+    // Scheduling variables
+    int tmp_kernel_index = 0;                               // Temporal kernel index
+    int num_kernels_checked = 0;                            // Number of kernels checked
+    int selected_kernel_index = -1;                         // Index of the selected kernel to schedule
+    int selected_kernel_cu = 0;                             // CUs of the selected kernel to schedule
+
+    // Scheduling variables that last until the next scheduling decision
+    static int kernels_to_schedule[TYPES_OF_KERNELS] = {0};        // Array to indicate which kernels are schedulable
+    static int kernels_to_schedule_index[TYPES_OF_KERNELS] = {-1}; // Array to indicate the index of the kernels to schedule
+    static int num_kernels_to_schedule = 0;                        // Number of kernels to schedule
+
+    // TODO: remove, debug
+    int num_decision_changes = 0;
+    static int num_first_kernel_scheduled = 0;
+    static int num_other_kernel_scheduled = 0;
+
+    int i;
+
+    // Online models variables
+	online_models_features_t scheduling_request;
+    online_models_schedule_decision_t scheduling_decision;
+
+    // Reset prior schedule decisions if needed
+    if (reset_prior_decisions == 1) {
+        // printf("[SCHED] Resetting prior schedule decisions\n");
+        for (i = 0; i < TYPES_OF_KERNELS; i++) {
+            kernels_to_schedule[i] = 0;
+            kernels_to_schedule_index[i] = -1;
+        }
+        num_kernels_to_schedule = 0;
+    }
+
+    // Go to schedule peding kernels if any
+    // printf("[SCHED] Number of kernels to schedule0: %d\n", num_kernels_to_schedule);
+    if (num_kernels_to_schedule > 0) goto schedule_peding_kernels;
+
+    // Include the cpu_usage and running kernels in the scheduling request
+    scheduling_request.user = user_cpu;
+    scheduling_request.kernel = kernel_cpu;
+    scheduling_request.idle = idle_cpu;
+    scheduling_request.main = 0xFF;                         // Tell the python code is an scheduling request
+    scheduling_request.aes = duplicated_kernels[0];
+    scheduling_request.bulk = duplicated_kernels[1];
+    scheduling_request.crs = duplicated_kernels[2];
+    scheduling_request.kmp = duplicated_kernels[3];
+    scheduling_request.knn = duplicated_kernels[4];
+    scheduling_request.merge = duplicated_kernels[5];
+    scheduling_request.nw = duplicated_kernels[6];
+    scheduling_request.queue = duplicated_kernels[7];
+    scheduling_request.stencil2d = duplicated_kernels[8];
+    scheduling_request.stencil3d = duplicated_kernels[9];
+    scheduling_request.strided = duplicated_kernels[10];
+
+    // Special case for HEAD
+    if(duplicated_kernels[tmp->data.kernel_label] == 0) {
+
+        // Include the kernel label in the scheduling request
+        add_kernel_label_to_scheduling_request(&scheduling_request, tmp->data.kernel_label);
+
+        // Include the kernel as schedulable
+        kernels_to_schedule[tmp->data.kernel_label] = 1;
+        kernels_to_schedule_index[tmp->data.kernel_label] = tmp_kernel_index;
+        num_kernels_to_schedule++;
+
+        // TODO: remove, debug. Check if the scheduler has taken a decition different that fifo
+        num_decision_changes++;
+
+        // Increment the number of kernels checked
+        num_kernels_checked++;
+    }
+    // printf("[SCHED] Number of kernels to schedule1: %d\n", num_kernels_to_schedule);
+
+    // Loop until we run out of kernels in the queue or we have checked the desired number of kernels
+    while(num_kernels_checked < num_kernels_to_check) {
+
+        // Rest of the cases
+        do {
+
+            // Save previous node
+            prev = tmp;
+            // Check if exist a node at that position
+            // TODO: Remove the goto by spliting this function in multiple and return when this condition happen
+            // TODO: This is a temporal solution to go out of the nested loop
+            if(prev->next == NULL){
+                // printf("[SCHED] No more kernels executable in queue\n");
+                goto no_more_kernels;
+            }
+            // Get next node
+            tmp = prev->next;
+            // tmp_index
+            tmp_kernel_index++;
+
+        // }while( (tmp->data.cu > free_slots) || (duplicated_kernels[tmp->data.kernel_label] == 1) );
+        }while( (duplicated_kernels[tmp->data.kernel_label] > 0) || (kernels_to_schedule[tmp->data.kernel_label] == 1) );
+
+        // Include the kernel label in the scheduling request
+        add_kernel_label_to_scheduling_request(&scheduling_request, tmp->data.kernel_label);
+
+        // Include the kernel label in the kernels to check
+        kernels_to_schedule[tmp->data.kernel_label] = 1;
+        kernels_to_schedule_index[tmp->data.kernel_label] = tmp_kernel_index;
+        num_kernels_to_schedule++;
+
+        // Increment the number of kernels checked
+        num_kernels_checked++;
+    }
+    // printf("[SCHED] Number of kernels to schedule2: %d\n", num_kernels_to_schedule);
+
+    no_more_kernels:  // Label to go out of the nested loop when no more kernels are available
+    if (num_kernels_to_schedule == 0) return -1;
+
+    // Request scheduling decision
+    scheduling_decision = online_models_schedule(om, &scheduling_request);
+
+    // Get the kernels to be scheduled
+    for (i = 0; i < TYPES_OF_KERNELS; i++) {
+        if (kernels_to_schedule[i] == 1) {
+            // Get the CUs for the kernel
+            kernels_to_schedule[i] = get_kernel_from_scheduling_decision(&scheduling_decision, i);
+            // Clean kernel index if the scheduler decides not to schedule it
+            // and update the number of kernels to schedule
+            if (kernels_to_schedule[i] == 0) {
+                kernels_to_schedule_index[i] = -1;
+                num_kernels_to_schedule--;
+            }
+        }
+    }
+
+    schedule_peding_kernels: // Label to go to schedule pending kernels
+
+    // printf("[SCHED] Number of kernels to schedule: %d\n", num_kernels_to_schedule);
+    // printf("[SCHED] Kernels to schedule: ");
+    // for (i = 0; i < TYPES_OF_KERNELS; i++) {
+    //     printf("%d ", kernels_to_schedule[i]);
+    // }
+    // printf("\n");
+    // printf("[SCHED] Kernels to schedule index: ");
+    // for (i = 0; i < TYPES_OF_KERNELS; i++) {
+    //     printf("%d ", kernels_to_schedule_index[i]);
+    // }
+    // printf("\n");
+
+    // Get the first selected kernel to schedule
+    for (i = 0; i < TYPES_OF_KERNELS; i++) {
+        if (kernels_to_schedule[i] > 0) {
+            selected_kernel_index = kernels_to_schedule_index[i];
+            selected_kernel_cu = kernels_to_schedule[i];
+            // Clean the kernel info from the scheduling variables
+            kernels_to_schedule[i] = 0;
+            kernels_to_schedule_index[i] = -1;
+            // printf("[SCHED] Kernel %d selected to schedule (CUs: %d)\n", i, selected_kernel_cu);
+            break;
+        }
+    }
+
+    // Check if there are kernels to schedule
+    if (selected_kernel_index == -1) {
+        if (num_kernels_to_schedule > 0) {
+            print_error("%d kernels remain to be scheduled, but 'selected_kernel_index == -1'\n", num_kernels_to_schedule);
+            exit(1);
+        }
+        // No kernel to schedule
+        return -1;
+    }
+
+    // Dequeue the kernel decided by the CSA
+    if(dequeue_from(q, selected_kernel_index, d) < 0){
+        print_error("Error dequeuing kernel from queue when scheduling\n");
+        exit(1);
+    }
+
+    // Set the kernel CUs
+    d->cu = selected_kernel_cu;
+    num_kernels_to_schedule--;
+
+    // Adjust the kernel index of the rest of the kernels
+    if (num_kernels_to_schedule > 0) {
+        // printf("[SCHED] Adjusting kernel index of the rest of the kernels\n");
+        for (i = 0; i < TYPES_OF_KERNELS; i++) {
+            if (kernels_to_schedule_index[i] > selected_kernel_index) {
+                kernels_to_schedule_index[i]--;
+            }
+        }
+    }
+
+    // TODO: remove, debug. Indicate the number of times the scheduler takes a decision different than fifo
+    if (num_decision_changes == 1)
+        num_first_kernel_scheduled++;
+    else
+        num_other_kernel_scheduled++;
+
+    return 0;
+}
+
+/**
  * @brief Schedule the Least Interaction First (LIF) kernel from the queue
  *
  * @param q Pointer to the queue to dequeue the node from

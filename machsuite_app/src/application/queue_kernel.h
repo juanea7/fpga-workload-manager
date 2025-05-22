@@ -116,6 +116,22 @@ int dequeue_from(queue *q, const int pos, kernel_data *d);
 int dequeue_first_executable_kernel(queue *q, const int free_slots, const int *duplicated_kernels, kernel_data *d);
 
 /**
+ * @brief Schedule using a Crow Search Algorithm (CSA) to select kernel configuration from the queue
+ *
+ * @param q Pointer to the queue to dequeue the node from
+ * @param duplicated_kernels Array indicating wich kernels are duplicated
+ * @param d Pointer where the function will store the dequeued node
+ * @param om Pointer to the online models structure
+ * @param num_kernels_to_check Number of kernels to check
+ * @param user_cpu User CPU usage
+ * @param kernel_cpu Kernel CPU usage
+ * @param idle_cpu Idle CPU usage
+ * @param predicted_time_alone_map Map with the predicted time alone for each kernel
+ * @return (int) 0 on success, error code otherwise
+ */
+int schedule_CSA_from_n_executable_kernels(queue *q, const int *duplicated_kernels, kernel_data *d, const online_models_t *om, const int num_kernels_to_check, const float user_cpu, const float kernel_cpu, const float idle_cpu, const int reset_prior_decisions);
+
+/**
  * @brief Schedule the Least Interaction First (LIF) kernel from the queue
  *
  * @param q Pointer to the queue to dequeue the node from
